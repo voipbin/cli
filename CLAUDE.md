@@ -57,7 +57,9 @@ Follow the pattern in `calls.go` as the canonical example.
 - One resource per file in `internal/commands/`
 - Column definitions (`[]output.Column`) for both list and detail views
 - Pagination via `--page-token` and `--page-size` flags on list commands
-- Errors printed to stderr, non-zero exit code
+- Use `RunE` (not `Run`) for commands that perform API calls or I/O, so errors propagate correctly
+- Error handling: check `resp.StatusCode() != 200` and return `fmt.Errorf("API error: %s", resp.Status())`
+- Errors printed to stderr, non-zero exit code (via Cobra's `RunE` mechanism)
 - No new external dependencies without strong justification
 - Access keys are never logged or printed in output
 

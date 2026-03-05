@@ -35,10 +35,12 @@ curl -sSL https://github.com/voipbin/cli/releases/latest/download/vn-darwin-arm6
 curl -sSL https://github.com/voipbin/cli/releases/latest/download/vn-darwin-amd64 -o /usr/local/bin/vn && chmod +x /usr/local/bin/vn
 ```
 
-### Go install
+### Build from source
 
 ```bash
-go install github.com/voipbin/vn-cli/cmd/vn@latest
+git clone https://github.com/voipbin/cli.git && cd cli
+make build
+cp bin/vn /usr/local/bin/
 ```
 
 ## Quick Start
@@ -71,11 +73,19 @@ Configuration is stored in `~/.vn/config.yaml`.
 vn login
 
 # Non-interactive login
-vn login --access-key <key> --profile production --api-url https://api.voipbin.net/v1.0
+vn login --access-key <key> --profile production
+
+# With a custom API URL
+vn login --access-key <key> --profile staging --api-url https://staging-api.voipbin.net/v1.0
 
 # Remove credentials
 vn logout
+
+# Remove credentials for a specific profile
+vn logout --profile staging
 ```
+
+The login command validates your access key against the API before saving. If the key is invalid, authentication will fail with an error and no credentials will be stored.
 
 ### Access key priority
 
@@ -210,7 +220,7 @@ All commands follow the pattern `vn <resource> <verb> [args] [flags]`.
 
 ### Pagination
 
-List commands support pagination:
+List commands support pagination. When `--page-size` is not specified, the API uses its default page size.
 
 ```bash
 vn calls list --page-size 50
