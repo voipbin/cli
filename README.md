@@ -37,9 +37,12 @@ curl -sSL https://github.com/voipbin/cli/releases/latest/download/vn-darwin-amd6
 
 ### Build from source
 
+Building from source requires the [voipbin-go](https://github.com/voipbin/voipbin-go) SDK as a sibling directory:
+
 ```bash
-git clone https://github.com/voipbin/cli.git && cd cli
-make build
+git clone https://github.com/voipbin/voipbin-go.git
+git clone https://github.com/voipbin/cli.git
+cd cli && make build
 cp bin/vn /usr/local/bin/
 ```
 
