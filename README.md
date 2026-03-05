@@ -118,7 +118,7 @@ All commands follow the pattern `vn <resource> <verb> [args] [flags]`.
 | `calls` | `list`, `get`, `create`, `delete`, `hangup`, `hold`, `unhold`, `mute`, `unmute`, `silence`, `unsilence`, `moh`, `unmoh`, `recording-start`, `recording-stop`, `talk` |
 | `messages` | `list`, `get`, `create`, `delete` |
 | `emails` | `list`, `get`, `create`, `delete` |
-| `conferences` | `list`, `get`, `create`, `update`, `delete` |
+| `conferences` | `list`, `get`, `create`, `update`, `delete`, `recording-start`, `recording-stop`, `transcribe-start`, `transcribe-stop` |
 | `conferencecalls` | `list`, `get`, `delete` |
 | `groupcalls` | `list`, `get`, `create`, `delete`, `hangup` |
 | `transfers` | `create` |
