@@ -136,10 +136,10 @@ All commands follow the pattern `vn <resource> <verb> [args] [flags]`.
 
 | Resource | Verbs |
 |----------|-------|
-| `campaigns` | `list`, `get`, `create`, `update`, `delete`, `status`, `service-level`, `resource-info`, `next-campaign-id` |
+| `campaigns` | `list`, `get`, `create`, `update`, `delete`, `set-status`, `set-service-level`, `set-actions`, `set-next-campaign`, `set-resource-info` |
 | `campaigncalls` | `list`, `get`, `delete` |
-| `outdials` | `list`, `get`, `create`, `update`, `delete`, `targets`, `data`, `campaign-id` |
-| `outplans` | `list`, `get`, `create`, `update`, `delete`, `dial-info` |
+| `outdials` | `list`, `get`, `create`, `update`, `delete`, `set-campaign`, `set-data`, `list-targets`, `create-target`, `delete-target` |
+| `outplans` | `list`, `get`, `create`, `update`, `delete`, `set-dial-info` |
 
 ### Routing & Flow
 
@@ -148,7 +148,7 @@ All commands follow the pattern `vn <resource> <verb> [args] [flags]`.
 | `flows` | `list`, `get`, `create`, `update`, `delete` |
 | `activeflows` | `list`, `get`, `create`, `delete`, `stop` |
 | `routes` | `list`, `get`, `create`, `update`, `delete` |
-| `queues` | `list`, `get`, `create`, `update`, `delete`, `routing-method`, `tag-ids` |
+| `queues` | `list`, `get`, `create`, `update`, `delete`, `set-routing-method`, `set-tag-ids` |
 | `queuecalls` | `list`, `get`, `delete`, `kick` |
 | `extensions` | `list`, `get`, `create`, `update`, `delete` |
 
@@ -156,19 +156,19 @@ All commands follow the pattern `vn <resource> <verb> [args] [flags]`.
 
 | Resource | Verbs |
 |----------|-------|
-| `chats` | `list`, `get`, `create`, `update`, `delete`, `participant-ids`, `room-owner-id` |
+| `chats` | `list`, `get`, `create`, `update`, `delete`, `add-participant`, `remove-participant`, `set-room-owner` |
 | `chatrooms` | `list`, `get`, `create`, `update`, `delete` |
 | `chatmessages` | `list`, `get`, `create`, `delete` |
 | `chatroommessages` | `list`, `get`, `create`, `delete` |
-| `conversations` | `list`, `get`, `update`, `messages` |
+| `conversations` | `list`, `get`, `update`, `list-messages`, `create-message` |
 | `conversation-accounts` | `list`, `get`, `create`, `update`, `delete` |
 
 ### Account Management
 
 | Resource | Verbs |
 |----------|-------|
-| `agents` | `list`, `get`, `create`, `update`, `delete`, `addresses`, `password`, `permission`, `status`, `tag-ids` |
-| `customers` | `list`, `get`, `create`, `update`, `delete`, `billing-account-id` |
+| `agents` | `list`, `get`, `create`, `update`, `delete`, `update-addresses`, `update-password`, `update-permission`, `update-status`, `update-tag-ids` |
+| `customers` | `list`, `get`, `create`, `update`, `delete`, `update-billing-account` |
 | `accesskeys` | `list`, `get`, `create`, `update`, `delete` |
 | `tags` | `list`, `get`, `create`, `update`, `delete` |
 
@@ -176,7 +176,7 @@ All commands follow the pattern `vn <resource> <verb> [args] [flags]`.
 
 | Resource | Verbs |
 |----------|-------|
-| `numbers` | `list`, `get`, `create`, `update`, `delete`, `renew`, `flow-ids` |
+| `numbers` | `list`, `get`, `create`, `update`, `delete`, `renew`, `update-flow-ids` |
 | `available-numbers` | `list` |
 | `providers` | `list`, `get`, `create`, `update`, `delete` |
 | `trunks` | `list`, `get`, `create`, `update`, `delete` |
@@ -195,8 +195,18 @@ All commands follow the pattern `vn <resource> <verb> [args] [flags]`.
 
 | Resource | Verbs |
 |----------|-------|
-| `billing-accounts` | `list`, `get`, `create`, `update`, `delete`, `balance-add`, `balance-subtract`, `payment-info` |
+| `billing-accounts` | `list`, `get`, `create`, `update`, `delete`, `balance-add`, `balance-subtract`, `update-payment-info` |
 | `billings` | `list`, `get` |
+
+### Utility
+
+| Command | Description |
+|---------|-------------|
+| `me` | Show current authenticated user |
+| `version` | Print CLI version |
+| `login` | Authenticate and store credentials |
+| `logout` | Remove stored credentials |
+| `completion` | Generate shell completion scripts |
 
 ### Pagination
 
