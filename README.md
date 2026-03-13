@@ -37,7 +37,7 @@ curl -sSL https://github.com/voipbin/cli/releases/latest/download/vn-darwin-amd6
 
 ### Build from source
 
-Building from source requires the [voipbin-go](https://github.com/voipbin/voipbin-go) SDK as a sibling directory:
+Requires Go 1.23+ and the [voipbin-go](https://github.com/voipbin/voipbin-go) SDK as a sibling directory:
 
 ```bash
 git clone https://github.com/voipbin/voipbin-go.git
@@ -110,6 +110,12 @@ vn login --profile staging --api-url https://staging-api.voipbin.net/v1.0
 # Use a specific profile
 vn --profile staging agents list
 ```
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `VN_ACCESS_KEY` | API access key (overrides config file, overridden by `--access-key` flag) |
 
 ## Commands
 
@@ -281,3 +287,22 @@ vn completion powershell | Invoke-Expression
 ```
 
 To make it permanent, add the appropriate line to your shell's config file (e.g., `~/.bashrc`, `~/.zshrc`).
+
+## Troubleshooting
+
+**"no access key found"**
+
+Set an access key via one of: `vn login`, `--access-key` flag, or `VN_ACCESS_KEY` environment variable.
+
+**"API error" on login**
+
+The access key is validated against the API during login. Verify the key is correct and the API is reachable. If using a custom API URL, pass `--api-url` explicitly.
+
+**Build fails with missing `voipbin-go` module**
+
+The SDK is referenced via a local `replace` directive in `go.mod`. Clone [voipbin-go](https://github.com/voipbin/voipbin-go) as a sibling directory:
+
+```
+├── cli/
+└── voipbin-go/
+```
