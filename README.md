@@ -17,22 +17,22 @@ Download the latest release for your platform:
 
 **Linux (amd64)**
 ```bash
-sudo curl -sSL https://github.com/voipbin/cli/releases/latest/download/vn-linux-amd64 -o /usr/local/bin/vn && sudo chmod +x /usr/local/bin/vn
+curl -sSL https://github.com/voipbin/cli/releases/latest/download/vn-linux-amd64 -o /usr/local/bin/vn && chmod +x /usr/local/bin/vn
 ```
 
 **Linux (arm64)**
 ```bash
-sudo curl -sSL https://github.com/voipbin/cli/releases/latest/download/vn-linux-arm64 -o /usr/local/bin/vn && sudo chmod +x /usr/local/bin/vn
+curl -sSL https://github.com/voipbin/cli/releases/latest/download/vn-linux-arm64 -o /usr/local/bin/vn && chmod +x /usr/local/bin/vn
 ```
 
 **macOS (Apple Silicon)**
 ```bash
-sudo curl -sSL https://github.com/voipbin/cli/releases/latest/download/vn-darwin-arm64 -o /usr/local/bin/vn && sudo chmod +x /usr/local/bin/vn
+curl -sSL https://github.com/voipbin/cli/releases/latest/download/vn-darwin-arm64 -o /usr/local/bin/vn && chmod +x /usr/local/bin/vn
 ```
 
 **macOS (Intel)**
 ```bash
-sudo curl -sSL https://github.com/voipbin/cli/releases/latest/download/vn-darwin-amd64 -o /usr/local/bin/vn && sudo chmod +x /usr/local/bin/vn
+curl -sSL https://github.com/voipbin/cli/releases/latest/download/vn-darwin-amd64 -o /usr/local/bin/vn && chmod +x /usr/local/bin/vn
 ```
 
 ### Build from source
