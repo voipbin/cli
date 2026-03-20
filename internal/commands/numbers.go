@@ -215,8 +215,9 @@ func newNumbersDeleteCmd() *cobra.Command {
 
 func newNumbersRenewCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "renew",
+		Use:   "renew <id>",
 		Short: "Renew a phone number",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
@@ -228,11 +229,11 @@ func newNumbersRenewCmd() *cobra.Command {
 				"tm_renew": tmRenew,
 			}
 
-			if _, err := c.Post(context.Background(), "/numbers/renew", body); err != nil {
+			if _, err := c.Post(context.Background(), "/numbers/"+args[0]+"/renew", body); err != nil {
 				return fmt.Errorf("could not renew number: %w", err)
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "Number renewal scheduled.\n")
+			fmt.Fprintf(cmd.OutOrStdout(), "Number %s renewal scheduled.\n", args[0])
 			return nil
 		},
 	}

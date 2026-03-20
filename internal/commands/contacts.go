@@ -159,6 +159,7 @@ func newContactsCreateCmd() *cobra.Command {
 	cmd.Flags().String("source", "", "Source")
 	cmd.Flags().String("external-id", "", "External ID")
 	cmd.Flags().String("notes", "", "Notes")
+	_ = cmd.MarkFlagRequired("display-name")
 	return cmd
 }
 
