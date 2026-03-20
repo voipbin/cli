@@ -131,10 +131,18 @@ func newSpeakingsCreateCmd() *cobra.Command {
 			body := map[string]interface{}{
 				"reference_type": referenceType,
 				"reference_id":   referenceID,
-				"language":       language,
-				"provider":       provider,
-				"voice_id":       voiceID,
-				"direction":      direction,
+			}
+			if language != "" {
+				body["language"] = language
+			}
+			if provider != "" {
+				body["provider"] = provider
+			}
+			if voiceID != "" {
+				body["voice_id"] = voiceID
+			}
+			if direction != "" {
+				body["direction"] = direction
 			}
 
 			result, err := c.Post(context.Background(), "/speakings", body)

@@ -163,11 +163,18 @@ func newNumbersUpdateCmd() *cobra.Command {
 			callFlowID, _ := cmd.Flags().GetString("call-flow-id")
 			messageFlowID, _ := cmd.Flags().GetString("message-flow-id")
 
-			body := map[string]interface{}{
-				"name":            name,
-				"detail":          detail,
-				"call_flow_id":    callFlowID,
-				"message_flow_id": messageFlowID,
+			body := map[string]interface{}{}
+			if name != "" {
+				body["name"] = name
+			}
+			if detail != "" {
+				body["detail"] = detail
+			}
+			if callFlowID != "" {
+				body["call_flow_id"] = callFlowID
+			}
+			if messageFlowID != "" {
+				body["message_flow_id"] = messageFlowID
 			}
 
 			result, err := c.Put(context.Background(), "/numbers/"+args[0], body)

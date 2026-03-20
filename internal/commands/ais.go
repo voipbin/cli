@@ -185,17 +185,33 @@ func newAisUpdateCmd() *cobra.Command {
 			ttsType, _ := cmd.Flags().GetString("tts-type")
 			ttsVoiceID, _ := cmd.Flags().GetString("tts-voice-id")
 
-			body := map[string]interface{}{
-				"name":         name,
-				"detail":       detail,
-				"engine_type":  engineType,
-				"engine_model": engineModel,
-				"engine_key":   engineKey,
-				"engine_data":  map[string]interface{}{},
-				"init_prompt":  initPrompt,
-				"stt_type":     sttType,
-				"tts_type":     ttsType,
-				"tts_voice_id": ttsVoiceID,
+			body := map[string]interface{}{}
+			if name != "" {
+				body["name"] = name
+			}
+			if detail != "" {
+				body["detail"] = detail
+			}
+			if engineType != "" {
+				body["engine_type"] = engineType
+			}
+			if engineModel != "" {
+				body["engine_model"] = engineModel
+			}
+			if engineKey != "" {
+				body["engine_key"] = engineKey
+			}
+			if initPrompt != "" {
+				body["init_prompt"] = initPrompt
+			}
+			if sttType != "" {
+				body["stt_type"] = sttType
+			}
+			if ttsType != "" {
+				body["tts_type"] = ttsType
+			}
+			if ttsVoiceID != "" {
+				body["tts_voice_id"] = ttsVoiceID
 			}
 
 			result, err := c.Put(context.Background(), "/ais/"+args[0], body)

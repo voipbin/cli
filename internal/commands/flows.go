@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -144,13 +145,24 @@ func newFlowsUpdateCmd() *cobra.Command {
 			name, _ := cmd.Flags().GetString("name")
 			detail, _ := cmd.Flags().GetString("detail")
 			onCompleteFlowID, _ := cmd.Flags().GetString("on-complete-flow-id")
-			body := map[string]interface{}{
-				"name":    name,
-				"detail":  detail,
-				"actions": []interface{}{},
+			actionsJSON, _ := cmd.Flags().GetString("actions")
+
+			body := map[string]interface{}{}
+			if name != "" {
+				body["name"] = name
+			}
+			if detail != "" {
+				body["detail"] = detail
 			}
 			if onCompleteFlowID != "" {
 				body["on_complete_flow_id"] = onCompleteFlowID
+			}
+			if actionsJSON != "" {
+				var actions interface{}
+				if err := json.Unmarshal([]byte(actionsJSON), &actions); err != nil {
+					return fmt.Errorf("invalid actions JSON: %w", err)
+				}
+				body["actions"] = actions
 			}
 			item, err := c.Put(context.Background(), "/flows/"+args[0], body)
 			if err != nil {
@@ -162,6 +174,7 @@ func newFlowsUpdateCmd() *cobra.Command {
 	cmd.Flags().String("name", "", "New name")
 	cmd.Flags().String("detail", "", "New detail")
 	cmd.Flags().String("on-complete-flow-id", "", "Flow ID to execute on completion")
+	cmd.Flags().String("actions", "", "Actions as JSON array")
 	return cmd
 }
 

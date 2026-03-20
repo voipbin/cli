@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -232,8 +233,14 @@ func newAgentsUpdateAddressesCmd() *cobra.Command {
 				return err
 			}
 
+			addressesJSON, _ := cmd.Flags().GetString("addresses")
+			var addresses interface{}
+			if err := json.Unmarshal([]byte(addressesJSON), &addresses); err != nil {
+				return fmt.Errorf("invalid addresses JSON: %w", err)
+			}
+
 			body := map[string]interface{}{
-				"addresses": []interface{}{},
+				"addresses": addresses,
 			}
 
 			result, err := c.Put(context.Background(), "/agents/"+args[0]+"/addresses", body)
@@ -244,6 +251,8 @@ func newAgentsUpdateAddressesCmd() *cobra.Command {
 			return output.PrintItem(cmd, result, agentDetailColumns)
 		},
 	}
+	cmd.Flags().String("addresses", "", "Addresses as JSON array (e.g. '[{\"type\":\"sip\",\"target\":\"user@host\"}]')")
+	_ = cmd.MarkFlagRequired("addresses")
 	return cmd
 }
 

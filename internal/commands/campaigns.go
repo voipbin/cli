@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -187,12 +188,21 @@ func newCampaignsUpdateCmd() *cobra.Command {
 			endHandle, _ := cmd.Flags().GetString("end-handle")
 			serviceLevel, _ := cmd.Flags().GetInt("service-level")
 
-			body := map[string]interface{}{
-				"name":          name,
-				"detail":        detail,
-				"type":          campType,
-				"end_handle":    endHandle,
-				"service_level": serviceLevel,
+			body := map[string]interface{}{}
+			if name != "" {
+				body["name"] = name
+			}
+			if detail != "" {
+				body["detail"] = detail
+			}
+			if campType != "" {
+				body["type"] = campType
+			}
+			if endHandle != "" {
+				body["end_handle"] = endHandle
+			}
+			if serviceLevel > 0 {
+				body["service_level"] = serviceLevel
 			}
 
 			result, err := c.Put(context.Background(), "/campaigns/"+args[0], body)
@@ -306,8 +316,14 @@ func newCampaignsSetActionsCmd() *cobra.Command {
 				return err
 			}
 
+			actionsJSON, _ := cmd.Flags().GetString("actions")
+			var actions interface{}
+			if err := json.Unmarshal([]byte(actionsJSON), &actions); err != nil {
+				return fmt.Errorf("invalid actions JSON: %w", err)
+			}
+
 			body := map[string]interface{}{
-				"actions": []interface{}{},
+				"actions": actions,
 			}
 
 			_, err = c.Put(context.Background(), "/campaigns/"+args[0]+"/actions", body)
@@ -319,6 +335,8 @@ func newCampaignsSetActionsCmd() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().String("actions", "", "Actions as JSON array")
+	_ = cmd.MarkFlagRequired("actions")
 	return cmd
 }
 

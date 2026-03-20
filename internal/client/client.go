@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -84,6 +85,7 @@ func (c *Client) do(ctx context.Context, method, path string, body interface{}) 
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
+	req.Header.Set("Accept", "application/json")
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -132,7 +134,11 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body interface
 func (c *Client) List(ctx context.Context, path string, params url.Values) ([]map[string]interface{}, string, error) {
 	fullPath := path
 	if len(params) > 0 {
-		fullPath = path + "?" + params.Encode()
+		sep := "?"
+		if strings.Contains(path, "?") {
+			sep = "&"
+		}
+		fullPath = path + sep + params.Encode()
 	}
 
 	resp, err := c.do(ctx, http.MethodGet, fullPath, nil)
@@ -178,7 +184,7 @@ func (c *Client) Put(ctx context.Context, path string, body interface{}) (map[st
 	return c.doJSON(ctx, http.MethodPut, path, body)
 }
 
-// Delete sends DELETE and returns the deleted object.
+// Delete sends DELETE and returns the parsed response body, if any.
 func (c *Client) Delete(ctx context.Context, path string) (map[string]interface{}, error) {
 	return c.doJSON(ctx, http.MethodDelete, path, nil)
 }

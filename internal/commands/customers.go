@@ -174,14 +174,27 @@ func newCustomersUpdateCmd() *cobra.Command {
 			webhookURI, _ := cmd.Flags().GetString("webhook-uri")
 			webhookMethod, _ := cmd.Flags().GetString("webhook-method")
 
-			body := map[string]interface{}{
-				"name":           name,
-				"email":          email,
-				"phone_number":   phone,
-				"address":        address,
-				"detail":         detail,
-				"webhook_uri":    webhookURI,
-				"webhook_method": webhookMethod,
+			body := map[string]interface{}{}
+			if name != "" {
+				body["name"] = name
+			}
+			if email != "" {
+				body["email"] = email
+			}
+			if phone != "" {
+				body["phone_number"] = phone
+			}
+			if address != "" {
+				body["address"] = address
+			}
+			if detail != "" {
+				body["detail"] = detail
+			}
+			if webhookURI != "" {
+				body["webhook_uri"] = webhookURI
+			}
+			if webhookMethod != "" {
+				body["webhook_method"] = webhookMethod
 			}
 
 			result, err := c.Put(context.Background(), "/customers/"+args[0], body)

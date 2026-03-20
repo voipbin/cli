@@ -247,6 +247,61 @@ func TestRawGet(t *testing.T) {
 	}
 }
 
+func TestCrossDomainRedirectBlocked(t *testing.T) {
+	// Start a "foreign" server to redirect to
+	foreign := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		w.Write([]byte(`{"leaked": true}`))
+	}))
+	defer foreign.Close()
+
+	// Start the "home" server that redirects to the foreign server
+	home := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, foreign.URL+"/secret", http.StatusTemporaryRedirect)
+	}))
+	defer home.Close()
+
+	c := New(home.URL, "test-key")
+
+	resp, err := c.RawGet(context.Background(), "/file")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Should get the redirect response, not follow it cross-domain
+	if resp.StatusCode != http.StatusTemporaryRedirect {
+		t.Errorf("expected 307 (blocked redirect), got %d", resp.StatusCode)
+	}
+	location := resp.Header.Get("Location")
+	if location == "" {
+		t.Error("expected Location header on blocked redirect")
+	}
+}
+
+func TestSameDomainRedirectFollowed(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/redirect", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/final", http.StatusTemporaryRedirect)
+	})
+	mux.HandleFunc("/final", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		json.NewEncoder(w).Encode(map[string]interface{}{"followed": true})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	c := New(srv.URL, "test-key")
+
+	result, err := c.Get(context.Background(), "/redirect")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result["followed"] != true {
+		t.Errorf("expected same-domain redirect to be followed, got %v", result)
+	}
+}
+
 func TestListAPIError(t *testing.T) {
 	srv, c := testServer(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(500)
