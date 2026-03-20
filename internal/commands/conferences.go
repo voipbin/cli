@@ -316,8 +316,9 @@ func newConferencesTranscribeStartCmd() *cobra.Command {
 
 			language, _ := cmd.Flags().GetString("language")
 
-			body := map[string]interface{}{
-				"language": language,
+			body := map[string]interface{}{}
+			if language != "" {
+				body["language"] = language
 			}
 
 			_, err = c.Post(context.Background(), "/conferences/"+args[0]+"/transcribe_start", body)

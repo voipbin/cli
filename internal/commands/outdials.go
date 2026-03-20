@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -114,12 +115,18 @@ func newOutdialsCreateCmd() *cobra.Command {
 			name, _ := cmd.Flags().GetString("name")
 			detail, _ := cmd.Flags().GetString("detail")
 			campaignID, _ := cmd.Flags().GetString("campaign-id")
-			data, _ := cmd.Flags().GetString("data")
+			dataStr, _ := cmd.Flags().GetString("data")
+			var dataVal interface{}
+			if dataStr != "" {
+				if err := json.Unmarshal([]byte(dataStr), &dataVal); err != nil {
+					return fmt.Errorf("invalid JSON for --data: %w", err)
+				}
+			}
 			body := map[string]interface{}{
 				"name":        name,
 				"detail":      detail,
 				"campaign_id": campaignID,
-				"data":        data,
+				"data":        dataVal,
 			}
 			result, err := c.Post(context.Background(), "/outdials", body)
 			if err != nil {
@@ -223,8 +230,12 @@ func newOutdialsSetDataCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			data, _ := cmd.Flags().GetString("data")
-			body := map[string]interface{}{"data": data}
+			dataStr, _ := cmd.Flags().GetString("data")
+			var dataVal interface{}
+			if err := json.Unmarshal([]byte(dataStr), &dataVal); err != nil {
+				return fmt.Errorf("invalid JSON for --data: %w", err)
+			}
+			body := map[string]interface{}{"data": dataVal}
 			_, err = c.Put(context.Background(), "/outdials/"+args[0]+"/data", body)
 			if err != nil {
 				return fmt.Errorf("could not set data: %w", err)

@@ -368,5 +368,6 @@ func newAgentsUpdateTagIdsCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringArray("tag-id", []string{}, "Tag ID (repeatable)")
+	_ = cmd.MarkFlagRequired("tag-id")
 	return cmd
 }
