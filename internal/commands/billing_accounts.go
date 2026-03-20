@@ -208,7 +208,7 @@ func newBillingAccountsBalanceAddCmd() *cobra.Command {
 				return err
 			}
 
-			amount, _ := cmd.Flags().GetFloat32("amount")
+			amount, _ := cmd.Flags().GetFloat64("amount")
 			body := map[string]interface{}{
 				"balance": amount,
 			}
@@ -221,7 +221,7 @@ func newBillingAccountsBalanceAddCmd() *cobra.Command {
 			return output.PrintItem(cmd, result, billingAccountDetailColumns)
 		},
 	}
-	cmd.Flags().Float32("amount", 0, "Amount to add (USD)")
+	cmd.Flags().Float64("amount", 0, "Amount to add (USD)")
 	_ = cmd.MarkFlagRequired("amount")
 	return cmd
 }
@@ -237,7 +237,7 @@ func newBillingAccountsBalanceSubtractCmd() *cobra.Command {
 				return err
 			}
 
-			amount, _ := cmd.Flags().GetFloat32("amount")
+			amount, _ := cmd.Flags().GetFloat64("amount")
 			body := map[string]interface{}{
 				"balance": amount,
 			}
@@ -250,7 +250,7 @@ func newBillingAccountsBalanceSubtractCmd() *cobra.Command {
 			return output.PrintItem(cmd, result, billingAccountDetailColumns)
 		},
 	}
-	cmd.Flags().Float32("amount", 0, "Amount to subtract (USD)")
+	cmd.Flags().Float64("amount", 0, "Amount to subtract (USD)")
 	_ = cmd.MarkFlagRequired("amount")
 	return cmd
 }

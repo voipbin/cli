@@ -121,7 +121,9 @@ func newAccesskeysCreateCmd() *cobra.Command {
 			body := map[string]interface{}{
 				"name":   name,
 				"detail": detail,
-				"expire": expire,
+			}
+			if cmd.Flags().Changed("expire") {
+				body["expire"] = expire
 			}
 
 			result, err := c.Post(context.Background(), "/accesskeys", body)
