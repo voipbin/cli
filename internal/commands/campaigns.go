@@ -387,11 +387,18 @@ func newCampaignsSetResourceInfoCmd() *cobra.Command {
 			queueID, _ := cmd.Flags().GetString("queue-id")
 			nextCampaignID, _ := cmd.Flags().GetString("next-campaign-id")
 
-			body := map[string]interface{}{
-				"outplan_id":       outplanID,
-				"outdial_id":       outdialID,
-				"queue_id":         queueID,
-				"next_campaign_id": nextCampaignID,
+			body := map[string]interface{}{}
+			if outplanID != "" {
+				body["outplan_id"] = outplanID
+			}
+			if outdialID != "" {
+				body["outdial_id"] = outdialID
+			}
+			if queueID != "" {
+				body["queue_id"] = queueID
+			}
+			if nextCampaignID != "" {
+				body["next_campaign_id"] = nextCampaignID
 			}
 
 			_, err = c.Put(context.Background(), "/campaigns/"+args[0]+"/resource_info", body)

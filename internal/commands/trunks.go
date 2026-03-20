@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -162,14 +163,35 @@ func newTrunksUpdateCmd() *cobra.Command {
 			username, _ := cmd.Flags().GetString("username")
 			password, _ := cmd.Flags().GetString("password")
 			detail, _ := cmd.Flags().GetString("detail")
+			allowedIPsJSON, _ := cmd.Flags().GetString("allowed-ips")
+			authTypesJSON, _ := cmd.Flags().GetString("auth-types")
 
-			body := map[string]interface{}{
-				"name":        name,
-				"username":    username,
-				"password":    password,
-				"detail":      detail,
-				"allowed_ips": []interface{}{},
-				"auth_types":  []interface{}{},
+			body := map[string]interface{}{}
+			if name != "" {
+				body["name"] = name
+			}
+			if username != "" {
+				body["username"] = username
+			}
+			if password != "" {
+				body["password"] = password
+			}
+			if detail != "" {
+				body["detail"] = detail
+			}
+			if allowedIPsJSON != "" {
+				var parsed []interface{}
+				if err := json.Unmarshal([]byte(allowedIPsJSON), &parsed); err != nil {
+					return fmt.Errorf("invalid JSON for --allowed-ips: %w", err)
+				}
+				body["allowed_ips"] = parsed
+			}
+			if authTypesJSON != "" {
+				var parsed []interface{}
+				if err := json.Unmarshal([]byte(authTypesJSON), &parsed); err != nil {
+					return fmt.Errorf("invalid JSON for --auth-types: %w", err)
+				}
+				body["auth_types"] = parsed
 			}
 
 			result, err := c.Put(context.Background(), "/trunks/"+args[0], body)
@@ -184,6 +206,8 @@ func newTrunksUpdateCmd() *cobra.Command {
 	cmd.Flags().String("username", "", "Username")
 	cmd.Flags().String("password", "", "Password")
 	cmd.Flags().String("detail", "", "Trunk detail")
+	cmd.Flags().String("allowed-ips", "", "Allowed IPs as JSON array")
+	cmd.Flags().String("auth-types", "", "Auth types as JSON array")
 	return cmd
 }
 

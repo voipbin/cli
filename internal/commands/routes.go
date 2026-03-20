@@ -161,12 +161,21 @@ func newRoutesUpdateCmd() *cobra.Command {
 			target, _ := cmd.Flags().GetString("target")
 			providerID, _ := cmd.Flags().GetString("provider-id")
 			priority, _ := cmd.Flags().GetInt("priority")
-			body := map[string]interface{}{
-				"name":        name,
-				"detail":      detail,
-				"target":      target,
-				"provider_id": providerID,
-				"priority":    priority,
+			body := map[string]interface{}{}
+			if name != "" {
+				body["name"] = name
+			}
+			if detail != "" {
+				body["detail"] = detail
+			}
+			if target != "" {
+				body["target"] = target
+			}
+			if providerID != "" {
+				body["provider_id"] = providerID
+			}
+			if priority > 0 {
+				body["priority"] = priority
 			}
 			item, err := c.Put(context.Background(), "/routes/"+args[0], body)
 			if err != nil {

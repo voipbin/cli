@@ -149,9 +149,12 @@ func newOutdialsUpdateCmd() *cobra.Command {
 			}
 			name, _ := cmd.Flags().GetString("name")
 			detail, _ := cmd.Flags().GetString("detail")
-			body := map[string]interface{}{
-				"name":   name,
-				"detail": detail,
+			body := map[string]interface{}{}
+			if name != "" {
+				body["name"] = name
+			}
+			if detail != "" {
+				body["detail"] = detail
 			}
 			result, err := c.Put(context.Background(), "/outdials/"+args[0], body)
 			if err != nil {

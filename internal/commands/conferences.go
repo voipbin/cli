@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -174,14 +175,30 @@ func newConferencesUpdateCmd() *cobra.Command {
 			preFlowID, _ := cmd.Flags().GetString("pre-flow-id")
 			postFlowID, _ := cmd.Flags().GetString("post-flow-id")
 			timeout, _ := cmd.Flags().GetInt("timeout")
+			dataJSON, _ := cmd.Flags().GetString("data")
 
-			body := map[string]interface{}{
-				"name":         name,
-				"detail":       detail,
-				"pre_flow_id":  preFlowID,
-				"post_flow_id": postFlowID,
-				"timeout":      timeout,
-				"data":         map[string]interface{}{},
+			body := map[string]interface{}{}
+			if name != "" {
+				body["name"] = name
+			}
+			if detail != "" {
+				body["detail"] = detail
+			}
+			if preFlowID != "" {
+				body["pre_flow_id"] = preFlowID
+			}
+			if postFlowID != "" {
+				body["post_flow_id"] = postFlowID
+			}
+			if timeout != 0 {
+				body["timeout"] = timeout
+			}
+			if dataJSON != "" {
+				var parsed map[string]interface{}
+				if err := json.Unmarshal([]byte(dataJSON), &parsed); err != nil {
+					return fmt.Errorf("invalid JSON for --data: %w", err)
+				}
+				body["data"] = parsed
 			}
 
 			result, err := c.Put(context.Background(), "/conferences/"+args[0], body)
@@ -197,6 +214,7 @@ func newConferencesUpdateCmd() *cobra.Command {
 	cmd.Flags().String("pre-flow-id", "", "Pre-flow ID")
 	cmd.Flags().String("post-flow-id", "", "Post-flow ID")
 	cmd.Flags().Int("timeout", 0, "Conference timeout in seconds")
+	cmd.Flags().String("data", "", "Data as JSON object")
 	return cmd
 }
 

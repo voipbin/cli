@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -158,15 +159,35 @@ func newQueuesUpdateCmd() *cobra.Command {
 			serviceTimeout, _ := cmd.Flags().GetInt("service-timeout")
 			waitTimeout, _ := cmd.Flags().GetInt("wait-timeout")
 			waitFlowID, _ := cmd.Flags().GetString("wait-flow-id")
-			body := map[string]interface{}{
-				"name":            name,
-				"detail":          detail,
-				"routing_method":  routingMethod,
-				"service_timeout": serviceTimeout,
-				"wait_timeout":    waitTimeout,
-				"wait_flow_id":    waitFlowID,
-				"tag_ids":         []string{},
+			tagIDsJSON, _ := cmd.Flags().GetString("tag-ids")
+
+			body := map[string]interface{}{}
+			if name != "" {
+				body["name"] = name
 			}
+			if detail != "" {
+				body["detail"] = detail
+			}
+			if routingMethod != "" {
+				body["routing_method"] = routingMethod
+			}
+			if serviceTimeout != 0 {
+				body["service_timeout"] = serviceTimeout
+			}
+			if waitTimeout != 0 {
+				body["wait_timeout"] = waitTimeout
+			}
+			if waitFlowID != "" {
+				body["wait_flow_id"] = waitFlowID
+			}
+			if tagIDsJSON != "" {
+				var parsed []interface{}
+				if err := json.Unmarshal([]byte(tagIDsJSON), &parsed); err != nil {
+					return fmt.Errorf("invalid JSON for --tag-ids: %w", err)
+				}
+				body["tag_ids"] = parsed
+			}
+
 			item, err := c.Put(context.Background(), "/queues/"+args[0], body)
 			if err != nil {
 				return fmt.Errorf("could not update queue: %w", err)
@@ -180,6 +201,7 @@ func newQueuesUpdateCmd() *cobra.Command {
 	cmd.Flags().Int("service-timeout", 0, "New service timeout in ms")
 	cmd.Flags().Int("wait-timeout", 0, "New wait timeout in ms")
 	cmd.Flags().String("wait-flow-id", "", "New wait flow ID")
+	cmd.Flags().String("tag-ids", "", "Tag IDs as JSON array")
 	return cmd
 }
 

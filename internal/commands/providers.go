@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -167,15 +168,33 @@ func newProvidersUpdateCmd() *cobra.Command {
 			techPrefix, _ := cmd.Flags().GetString("tech-prefix")
 			techPostfix, _ := cmd.Flags().GetString("tech-postfix")
 			provType, _ := cmd.Flags().GetString("type")
+			techHeadersJSON, _ := cmd.Flags().GetString("tech-headers")
 
-			body := map[string]interface{}{
-				"name":         name,
-				"hostname":     hostname,
-				"detail":       detail,
-				"tech_prefix":  techPrefix,
-				"tech_postfix": techPostfix,
-				"type":         provType,
-				"tech_headers": map[string]interface{}{},
+			body := map[string]interface{}{}
+			if name != "" {
+				body["name"] = name
+			}
+			if hostname != "" {
+				body["hostname"] = hostname
+			}
+			if detail != "" {
+				body["detail"] = detail
+			}
+			if techPrefix != "" {
+				body["tech_prefix"] = techPrefix
+			}
+			if techPostfix != "" {
+				body["tech_postfix"] = techPostfix
+			}
+			if provType != "" {
+				body["type"] = provType
+			}
+			if techHeadersJSON != "" {
+				var parsed map[string]interface{}
+				if err := json.Unmarshal([]byte(techHeadersJSON), &parsed); err != nil {
+					return fmt.Errorf("invalid JSON for --tech-headers: %w", err)
+				}
+				body["tech_headers"] = parsed
 			}
 
 			result, err := c.Put(context.Background(), "/providers/"+args[0], body)
@@ -192,6 +211,7 @@ func newProvidersUpdateCmd() *cobra.Command {
 	cmd.Flags().String("tech-prefix", "", "Tech prefix")
 	cmd.Flags().String("tech-postfix", "", "Tech postfix")
 	cmd.Flags().String("type", "", "Provider type")
+	cmd.Flags().String("tech-headers", "", "Tech headers as JSON object")
 	return cmd
 }
 

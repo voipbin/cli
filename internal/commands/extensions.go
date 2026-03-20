@@ -147,10 +147,15 @@ func newExtensionsUpdateCmd() *cobra.Command {
 			name, _ := cmd.Flags().GetString("name")
 			detail, _ := cmd.Flags().GetString("detail")
 			password, _ := cmd.Flags().GetString("password")
-			body := map[string]interface{}{
-				"name":     name,
-				"detail":   detail,
-				"password": password,
+			body := map[string]interface{}{}
+			if name != "" {
+				body["name"] = name
+			}
+			if detail != "" {
+				body["detail"] = detail
+			}
+			if password != "" {
+				body["password"] = password
 			}
 			item, err := c.Put(context.Background(), "/extensions/"+args[0], body)
 			if err != nil {
