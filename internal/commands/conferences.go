@@ -190,7 +190,7 @@ func newConferencesUpdateCmd() *cobra.Command {
 			if postFlowID != "" {
 				body["post_flow_id"] = postFlowID
 			}
-			if timeout != 0 {
+			if cmd.Flags().Changed("timeout") {
 				body["timeout"] = timeout
 			}
 			if dataJSON != "" {
@@ -255,10 +255,15 @@ func newConferencesRecordingStartCmd() *cobra.Command {
 			format, _ := cmd.Flags().GetString("format")
 			onEndFlowID, _ := cmd.Flags().GetString("on-end-flow-id")
 
-			body := map[string]interface{}{
-				"duration":       duration,
-				"format":         format,
-				"on_end_flow_id": onEndFlowID,
+			body := map[string]interface{}{}
+			if cmd.Flags().Changed("duration") {
+				body["duration"] = duration
+			}
+			if format != "" {
+				body["format"] = format
+			}
+			if onEndFlowID != "" {
+				body["on_end_flow_id"] = onEndFlowID
 			}
 
 			_, err = c.Post(context.Background(), "/conferences/"+args[0]+"/recording_start", body)

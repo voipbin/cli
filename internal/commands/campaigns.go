@@ -201,7 +201,7 @@ func newCampaignsUpdateCmd() *cobra.Command {
 			if endHandle != "" {
 				body["end_handle"] = endHandle
 			}
-			if serviceLevel > 0 {
+			if cmd.Flags().Changed("service-level") {
 				body["service_level"] = serviceLevel
 			}
 

@@ -206,15 +206,30 @@ func newOutplansSetDialInfoCmd() *cobra.Command {
 			maxTry2, _ := cmd.Flags().GetInt("max-try-2")
 			maxTry3, _ := cmd.Flags().GetInt("max-try-3")
 			maxTry4, _ := cmd.Flags().GetInt("max-try-4")
-			body := map[string]interface{}{
-				"dial_timeout":   dialTimeout,
-				"try_interval":   tryInterval,
-				"source":         map[string]interface{}{"target": sourceTarget},
-				"max_try_count0": maxTry0,
-				"max_try_count1": maxTry1,
-				"max_try_count2": maxTry2,
-				"max_try_count3": maxTry3,
-				"max_try_count4": maxTry4,
+			body := map[string]interface{}{}
+			if cmd.Flags().Changed("dial-timeout") {
+				body["dial_timeout"] = dialTimeout
+			}
+			if cmd.Flags().Changed("try-interval") {
+				body["try_interval"] = tryInterval
+			}
+			if sourceTarget != "" {
+				body["source"] = map[string]interface{}{"target": sourceTarget}
+			}
+			if cmd.Flags().Changed("max-try-0") {
+				body["max_try_count0"] = maxTry0
+			}
+			if cmd.Flags().Changed("max-try-1") {
+				body["max_try_count1"] = maxTry1
+			}
+			if cmd.Flags().Changed("max-try-2") {
+				body["max_try_count2"] = maxTry2
+			}
+			if cmd.Flags().Changed("max-try-3") {
+				body["max_try_count3"] = maxTry3
+			}
+			if cmd.Flags().Changed("max-try-4") {
+				body["max_try_count4"] = maxTry4
 			}
 			result, err := c.Put(context.Background(), "/outplans/"+args[0]+"/dial_info", body)
 			if err != nil {

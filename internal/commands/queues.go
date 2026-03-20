@@ -171,10 +171,10 @@ func newQueuesUpdateCmd() *cobra.Command {
 			if routingMethod != "" {
 				body["routing_method"] = routingMethod
 			}
-			if serviceTimeout != 0 {
+			if cmd.Flags().Changed("service-timeout") {
 				body["service_timeout"] = serviceTimeout
 			}
-			if waitTimeout != 0 {
+			if cmd.Flags().Changed("wait-timeout") {
 				body["wait_timeout"] = waitTimeout
 			}
 			if waitFlowID != "" {

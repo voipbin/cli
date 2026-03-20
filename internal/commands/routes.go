@@ -174,7 +174,7 @@ func newRoutesUpdateCmd() *cobra.Command {
 			if providerID != "" {
 				body["provider_id"] = providerID
 			}
-			if priority > 0 {
+			if cmd.Flags().Changed("priority") {
 				body["priority"] = priority
 			}
 			item, err := c.Put(context.Background(), "/routes/"+args[0], body)

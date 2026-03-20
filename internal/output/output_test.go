@@ -50,7 +50,7 @@ func TestNewFormatter(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		_, err := NewFormatter(tt.format)
+		_, err := NewFormatter(tt.format, os.Stdout)
 		if (err != nil) != tt.wantErr {
 			t.Errorf("NewFormatter(%q) error = %v, wantErr %v", tt.format, err, tt.wantErr)
 		}
@@ -64,7 +64,7 @@ func TestJSONFormatterList(t *testing.T) {
 	}
 
 	out := captureStdout(t, func() {
-		f := &JSONFormatter{}
+		f := &JSONFormatter{Writer: os.Stdout}
 		if err := f.FormatList(items, testColumns); err != nil {
 			t.Fatalf("FormatList error: %v", err)
 		}
@@ -83,7 +83,7 @@ func TestJSONFormatterItem(t *testing.T) {
 	item := testItem{ID: "1", Name: "alpha", Status: "active"}
 
 	out := captureStdout(t, func() {
-		f := &JSONFormatter{}
+		f := &JSONFormatter{Writer: os.Stdout}
 		if err := f.FormatItem(item, testColumns); err != nil {
 			t.Fatalf("FormatItem error: %v", err)
 		}
@@ -104,7 +104,7 @@ func TestYAMLFormatterList(t *testing.T) {
 	}
 
 	out := captureStdout(t, func() {
-		f := &YAMLFormatter{}
+		f := &YAMLFormatter{Writer: os.Stdout}
 		if err := f.FormatList(items, testColumns); err != nil {
 			t.Fatalf("FormatList error: %v", err)
 		}
@@ -126,7 +126,7 @@ func TestTableFormatterList(t *testing.T) {
 	}
 
 	out := captureStdout(t, func() {
-		f := &TableFormatter{}
+		f := &TableFormatter{Writer: os.Stdout}
 		if err := f.FormatList(items, testColumns); err != nil {
 			t.Fatalf("FormatList error: %v", err)
 		}
@@ -147,7 +147,7 @@ func TestTableFormatterItem(t *testing.T) {
 	item := testItem{ID: "1", Name: "alpha", Status: "active"}
 
 	out := captureStdout(t, func() {
-		f := &TableFormatter{}
+		f := &TableFormatter{Writer: os.Stdout}
 		if err := f.FormatItem(item, testColumns); err != nil {
 			t.Fatalf("FormatItem error: %v", err)
 		}
@@ -163,7 +163,7 @@ func TestTableFormatterItem(t *testing.T) {
 
 func TestTableFormatterEmptyList(t *testing.T) {
 	out := captureStdout(t, func() {
-		f := &TableFormatter{}
+		f := &TableFormatter{Writer: os.Stdout}
 		if err := f.FormatList([]testItem{}, testColumns); err != nil {
 			t.Fatalf("FormatList error: %v", err)
 		}
