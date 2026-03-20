@@ -136,6 +136,7 @@ func newBillingAccountsCreateCmd() *cobra.Command {
 	}
 	cmd.Flags().String("name", "", "Account name")
 	cmd.Flags().String("detail", "", "Account detail")
+	_ = cmd.MarkFlagRequired("name")
 	return cmd
 }
 

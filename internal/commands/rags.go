@@ -208,6 +208,10 @@ func newRagsAddSourceCmd() *cobra.Command {
 			storageFileIDs, _ := cmd.Flags().GetStringSlice("storage-file-ids")
 			sourceURLs, _ := cmd.Flags().GetStringSlice("source-urls")
 
+			if len(storageFileIDs) == 0 && len(sourceURLs) == 0 {
+				return fmt.Errorf("at least one of --storage-file-ids or --source-urls is required")
+			}
+
 			body := map[string]interface{}{}
 			if len(storageFileIDs) > 0 {
 				body["storage_file_ids"] = storageFileIDs

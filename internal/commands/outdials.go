@@ -116,7 +116,7 @@ func newOutdialsCreateCmd() *cobra.Command {
 			detail, _ := cmd.Flags().GetString("detail")
 			campaignID, _ := cmd.Flags().GetString("campaign-id")
 			dataStr, _ := cmd.Flags().GetString("data")
-			var dataVal interface{}
+			var dataVal interface{} = map[string]interface{}{}
 			if dataStr != "" {
 				if err := json.Unmarshal([]byte(dataStr), &dataVal); err != nil {
 					return fmt.Errorf("invalid JSON for --data: %w", err)
@@ -301,12 +301,20 @@ func newOutdialsCreateTargetCmd() *cobra.Command {
 			}
 			name, _ := cmd.Flags().GetString("name")
 			detail, _ := cmd.Flags().GetString("detail")
-			data, _ := cmd.Flags().GetString("data")
+			dataStr, _ := cmd.Flags().GetString("data")
 			dest0, _ := cmd.Flags().GetString("destination-0")
+
+			var dataVal interface{}
+			if dataStr != "" {
+				if err := json.Unmarshal([]byte(dataStr), &dataVal); err != nil {
+					return fmt.Errorf("invalid JSON for --data: %w", err)
+				}
+			}
+
 			body := map[string]interface{}{
-				"name":         name,
-				"detail":       detail,
-				"data":         data,
+				"name":          name,
+				"detail":        detail,
+				"data":          dataVal,
 				"destination_0": map[string]interface{}{"target": dest0},
 			}
 			_, err = c.Post(context.Background(), "/outdials/"+args[0]+"/targets", body)

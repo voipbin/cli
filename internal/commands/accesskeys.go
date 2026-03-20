@@ -118,15 +118,10 @@ func newAccesskeysCreateCmd() *cobra.Command {
 			detail, _ := cmd.Flags().GetString("detail")
 			expire, _ := cmd.Flags().GetInt("expire")
 
-			body := map[string]interface{}{}
-			if name != "" {
-				body["name"] = name
-			}
-			if detail != "" {
-				body["detail"] = detail
-			}
-			if expire > 0 {
-				body["expire"] = expire
+			body := map[string]interface{}{
+				"name":   name,
+				"detail": detail,
+				"expire": expire,
 			}
 
 			result, err := c.Post(context.Background(), "/accesskeys", body)
@@ -140,6 +135,7 @@ func newAccesskeysCreateCmd() *cobra.Command {
 	cmd.Flags().String("name", "", "Access key name")
 	cmd.Flags().String("detail", "", "Access key detail")
 	cmd.Flags().Int("expire", 0, "Expiry (seconds from now)")
+	_ = cmd.MarkFlagRequired("name")
 	return cmd
 }
 

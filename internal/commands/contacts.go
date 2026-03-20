@@ -253,6 +253,10 @@ func newContactsLookupCmd() *cobra.Command {
 			phone, _ := cmd.Flags().GetString("phone")
 			email, _ := cmd.Flags().GetString("email")
 
+			if phone == "" && email == "" {
+				return fmt.Errorf("at least one of --phone or --email is required")
+			}
+
 			params := url.Values{}
 			if phone != "" {
 				params.Set("phone", phone)

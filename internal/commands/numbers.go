@@ -120,16 +120,22 @@ func newNumbersCreateCmd() *cobra.Command {
 				return err
 			}
 
+			number, _ := cmd.Flags().GetString("number")
 			name, _ := cmd.Flags().GetString("name")
 			detail, _ := cmd.Flags().GetString("detail")
+			numberType, _ := cmd.Flags().GetString("type")
 			callFlowID, _ := cmd.Flags().GetString("call-flow-id")
 			messageFlowID, _ := cmd.Flags().GetString("message-flow-id")
 
 			body := map[string]interface{}{
+				"number":          number,
 				"name":            name,
 				"detail":          detail,
 				"call_flow_id":    callFlowID,
 				"message_flow_id": messageFlowID,
+			}
+			if numberType != "" {
+				body["type"] = numberType
 			}
 
 			result, err := c.Post(context.Background(), "/numbers", body)
@@ -140,10 +146,17 @@ func newNumbersCreateCmd() *cobra.Command {
 			return output.PrintItem(cmd, result, numberDetailColumns)
 		},
 	}
+	cmd.Flags().String("number", "", "Phone number to purchase")
 	cmd.Flags().String("name", "", "Number name")
 	cmd.Flags().String("detail", "", "Number detail")
+	cmd.Flags().String("type", "", "Number type (normal or virtual)")
 	cmd.Flags().String("call-flow-id", "", "Call flow ID")
 	cmd.Flags().String("message-flow-id", "", "Message flow ID")
+	_ = cmd.MarkFlagRequired("number")
+	_ = cmd.MarkFlagRequired("name")
+	_ = cmd.MarkFlagRequired("detail")
+	_ = cmd.MarkFlagRequired("call-flow-id")
+	_ = cmd.MarkFlagRequired("message-flow-id")
 	return cmd
 }
 
