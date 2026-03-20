@@ -307,7 +307,7 @@ func newOutdialsCreateTargetCmd() *cobra.Command {
 				"name":         name,
 				"detail":       detail,
 				"data":         data,
-				"destination0": map[string]interface{}{"target": dest0},
+				"destination_0": map[string]interface{}{"target": dest0},
 			}
 			_, err = c.Post(context.Background(), "/outdials/"+args[0]+"/targets", body)
 			if err != nil {

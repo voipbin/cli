@@ -217,19 +217,19 @@ func newOutplansSetDialInfoCmd() *cobra.Command {
 				body["source"] = map[string]interface{}{"target": sourceTarget}
 			}
 			if cmd.Flags().Changed("max-try-0") {
-				body["max_try_count0"] = maxTry0
+				body["max_try_count_0"] = maxTry0
 			}
 			if cmd.Flags().Changed("max-try-1") {
-				body["max_try_count1"] = maxTry1
+				body["max_try_count_1"] = maxTry1
 			}
 			if cmd.Flags().Changed("max-try-2") {
-				body["max_try_count2"] = maxTry2
+				body["max_try_count_2"] = maxTry2
 			}
 			if cmd.Flags().Changed("max-try-3") {
-				body["max_try_count3"] = maxTry3
+				body["max_try_count_3"] = maxTry3
 			}
 			if cmd.Flags().Changed("max-try-4") {
-				body["max_try_count4"] = maxTry4
+				body["max_try_count_4"] = maxTry4
 			}
 			result, err := c.Put(context.Background(), "/outplans/"+args[0]+"/dial_info", body)
 			if err != nil {
