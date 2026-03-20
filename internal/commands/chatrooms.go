@@ -3,11 +3,12 @@ package commands
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	"github.com/voipbin/vn-cli/internal/auth"
 	"github.com/voipbin/vn-cli/internal/output"
-	"github.com/voipbin/voipbin-go/gens/voipbin_client"
 )
 
 func newChatroomsCmd() *cobra.Command {
@@ -51,38 +52,31 @@ func newChatroomsListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List chatrooms",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 			pageToken, _ := cmd.Flags().GetString("page-token")
 			pageSize, _ := cmd.Flags().GetInt("page-size")
 			ownerID, _ := cmd.Flags().GetString("owner-id")
-			params := &voipbin_client.GetChatroomsParams{}
+			params := url.Values{}
 			if pageToken != "" {
-				params.PageToken = &pageToken
+				params.Set("page_token", pageToken)
 			}
 			if pageSize > 0 {
-				ps := pageSize
-				params.PageSize = &ps
+				params.Set("page_size", strconv.Itoa(pageSize))
 			}
 			if ownerID != "" {
-				params.OwnerId = &ownerID
+				params.Set("owner_id", ownerID)
 			}
-			resp, err := client.GetChatroomsWithResponse(context.Background(), params)
+			items, nextToken, err := c.List(context.Background(), "/chatrooms", params)
 			if err != nil {
 				return fmt.Errorf("could not list chatrooms: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
+			if nextToken != "" {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", nextToken)
 			}
-			if resp.JSON200 == nil || resp.JSON200.Result == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
-			if resp.JSON200.NextPageToken != nil && *resp.JSON200.NextPageToken != "" {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", *resp.JSON200.NextPageToken)
-			}
-			return output.PrintList(cmd, *resp.JSON200.Result, chatroomListColumns)
+			return output.PrintList(cmd, items, chatroomListColumns)
 		},
 	}
 	cmd.Flags().String("page-token", "", "Pagination token")
@@ -97,21 +91,15 @@ func newChatroomsGetCmd() *cobra.Command {
 		Short: "Get a chatroom by ID",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetChatroomsIdWithResponse(context.Background(), args[0])
+			item, err := c.Get(context.Background(), "/chatrooms/"+args[0])
 			if err != nil {
 				return fmt.Errorf("could not get chatroom: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
-			return output.PrintItem(cmd, resp.JSON200, chatroomDetailColumns)
+			return output.PrintItem(cmd, item, chatroomDetailColumns)
 		},
 	}
 }
@@ -121,29 +109,23 @@ func newChatroomsCreateCmd() *cobra.Command {
 		Use:   "create",
 		Short: "Create a new chatroom",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 			name, _ := cmd.Flags().GetString("name")
 			detail, _ := cmd.Flags().GetString("detail")
 			participantIDs, _ := cmd.Flags().GetStringSlice("participant-ids")
-			body := voipbin_client.PostChatroomsJSONRequestBody{
-				Name:           name,
-				Detail:         detail,
-				ParticipantIds: participantIDs,
+			body := map[string]interface{}{
+				"name":            name,
+				"detail":          detail,
+				"participant_ids": participantIDs,
 			}
-			resp, err := client.PostChatroomsWithResponse(context.Background(), body)
+			item, err := c.Post(context.Background(), "/chatrooms", body)
 			if err != nil {
 				return fmt.Errorf("could not create chatroom: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
-			return output.PrintItem(cmd, resp.JSON200, chatroomDetailColumns)
+			return output.PrintItem(cmd, item, chatroomDetailColumns)
 		},
 	}
 	cmd.Flags().String("name", "", "Chatroom name")
@@ -159,27 +141,24 @@ func newChatroomsUpdateCmd() *cobra.Command {
 		Short: "Update a chatroom",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 			name, _ := cmd.Flags().GetString("name")
 			detail, _ := cmd.Flags().GetString("detail")
-			body := voipbin_client.PutChatroomsIdJSONRequestBody{
-				Name:   name,
-				Detail: detail,
+			body := map[string]interface{}{}
+			if name != "" {
+				body["name"] = name
 			}
-			resp, err := client.PutChatroomsIdWithResponse(context.Background(), args[0], body)
+			if detail != "" {
+				body["detail"] = detail
+			}
+			item, err := c.Put(context.Background(), "/chatrooms/"+args[0], body)
 			if err != nil {
 				return fmt.Errorf("could not update chatroom: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
-			return output.PrintItem(cmd, resp.JSON200, chatroomDetailColumns)
+			return output.PrintItem(cmd, item, chatroomDetailColumns)
 		},
 	}
 	cmd.Flags().String("name", "", "New name")
@@ -193,16 +172,12 @@ func newChatroomsDeleteCmd() *cobra.Command {
 		Short: "Delete a chatroom",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
-			resp, err := client.DeleteChatroomsIdWithResponse(context.Background(), args[0])
-			if err != nil {
+			if _, err := c.Delete(context.Background(), "/chatrooms/"+args[0]); err != nil {
 				return fmt.Errorf("could not delete chatroom: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Chatroom %s deleted.\n", args[0])
 			return nil

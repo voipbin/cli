@@ -3,11 +3,12 @@ package commands
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	"github.com/voipbin/vn-cli/internal/auth"
 	"github.com/voipbin/vn-cli/internal/output"
-	"github.com/voipbin/voipbin-go/gens/voipbin_client"
 )
 
 func newEmailsCmd() *cobra.Command {
@@ -47,7 +48,7 @@ func newEmailsListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List emails",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -55,31 +56,24 @@ func newEmailsListCmd() *cobra.Command {
 			pageToken, _ := cmd.Flags().GetString("page-token")
 			pageSize, _ := cmd.Flags().GetInt("page-size")
 
-			params := &voipbin_client.GetEmailsParams{}
+			params := url.Values{}
 			if pageToken != "" {
-				params.PageToken = &pageToken
+				params.Set("page_token", pageToken)
 			}
 			if pageSize > 0 {
-				ps := pageSize
-				params.PageSize = &ps
+				params.Set("page_size", strconv.Itoa(pageSize))
 			}
 
-			resp, err := client.GetEmailsWithResponse(context.Background(), params)
+			items, nextToken, err := c.List(context.Background(), "/emails", params)
 			if err != nil {
 				return fmt.Errorf("could not list emails: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil || resp.JSON200.Result == nil {
-				return fmt.Errorf("unexpected empty response")
+
+			if nextToken != "" {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", nextToken)
 			}
 
-			if resp.JSON200.NextPageToken != nil && *resp.JSON200.NextPageToken != "" {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", *resp.JSON200.NextPageToken)
-			}
-
-			return output.PrintList(cmd, *resp.JSON200.Result, emailListColumns)
+			return output.PrintList(cmd, items, emailListColumns)
 		},
 	}
 	cmd.Flags().String("page-token", "", "Pagination token")
@@ -93,23 +87,17 @@ func newEmailsGetCmd() *cobra.Command {
 		Short: "Get an email by ID",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.GetEmailsIdWithResponse(context.Background(), args[0])
+			result, err := c.Get(context.Background(), "/emails/"+args[0])
 			if err != nil {
 				return fmt.Errorf("could not get email: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, emailDetailColumns)
+			return output.PrintItem(cmd, result, emailDetailColumns)
 		},
 	}
 }
@@ -119,7 +107,7 @@ func newEmailsCreateCmd() *cobra.Command {
 		Use:   "create",
 		Short: "Create a new email",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -128,25 +116,19 @@ func newEmailsCreateCmd() *cobra.Command {
 			subject, _ := cmd.Flags().GetString("subject")
 			content, _ := cmd.Flags().GetString("content")
 
-			body := voipbin_client.PostEmailsJSONRequestBody{
-				Destinations: []voipbin_client.CommonAddress{{Target: &destination}},
-				Subject:      subject,
-				Content:      content,
-				Attachments:  []voipbin_client.EmailManagerEmailAttachment{},
+			body := map[string]interface{}{
+				"destinations": []map[string]interface{}{{"target": destination}},
+				"subject":      subject,
+				"content":      content,
+				"attachments":  []interface{}{},
 			}
 
-			resp, err := client.PostEmailsWithResponse(context.Background(), body)
+			result, err := c.Post(context.Background(), "/emails", body)
 			if err != nil {
 				return fmt.Errorf("could not create email: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, emailDetailColumns)
+			return output.PrintItem(cmd, result, emailDetailColumns)
 		},
 	}
 	cmd.Flags().String("destination", "", "Destination email address")
@@ -164,17 +146,14 @@ func newEmailsDeleteCmd() *cobra.Command {
 		Short: "Delete an email",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.DeleteEmailsIdWithResponse(context.Background(), args[0])
+			_, err = c.Delete(context.Background(), "/emails/"+args[0])
 			if err != nil {
 				return fmt.Errorf("could not delete email: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Email %s deleted.\n", args[0])

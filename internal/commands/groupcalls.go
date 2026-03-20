@@ -3,11 +3,12 @@ package commands
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	"github.com/voipbin/vn-cli/internal/auth"
 	"github.com/voipbin/vn-cli/internal/output"
-	"github.com/voipbin/voipbin-go/gens/voipbin_client"
 )
 
 func newGroupcallsCmd() *cobra.Command {
@@ -52,7 +53,7 @@ func newGroupcallsListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List group calls",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -60,31 +61,24 @@ func newGroupcallsListCmd() *cobra.Command {
 			pageToken, _ := cmd.Flags().GetString("page-token")
 			pageSize, _ := cmd.Flags().GetInt("page-size")
 
-			params := &voipbin_client.GetGroupcallsParams{}
+			params := url.Values{}
 			if pageToken != "" {
-				params.PageToken = &pageToken
+				params.Set("page_token", pageToken)
 			}
 			if pageSize > 0 {
-				ps := pageSize
-				params.PageSize = &ps
+				params.Set("page_size", strconv.Itoa(pageSize))
 			}
 
-			resp, err := client.GetGroupcallsWithResponse(context.Background(), params)
+			items, nextToken, err := c.List(context.Background(), "/groupcalls", params)
 			if err != nil {
 				return fmt.Errorf("could not list group calls: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil || resp.JSON200.Result == nil {
-				return fmt.Errorf("unexpected empty response")
+
+			if nextToken != "" {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", nextToken)
 			}
 
-			if resp.JSON200.NextPageToken != nil && *resp.JSON200.NextPageToken != "" {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", *resp.JSON200.NextPageToken)
-			}
-
-			return output.PrintList(cmd, *resp.JSON200.Result, groupcallListColumns)
+			return output.PrintList(cmd, items, groupcallListColumns)
 		},
 	}
 	cmd.Flags().String("page-token", "", "Pagination token")
@@ -98,23 +92,17 @@ func newGroupcallsGetCmd() *cobra.Command {
 		Short: "Get a group call by ID",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.GetGroupcallsIdWithResponse(context.Background(), args[0])
+			result, err := c.Get(context.Background(), "/groupcalls/"+args[0])
 			if err != nil {
 				return fmt.Errorf("could not get group call: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, groupcallDetailColumns)
+			return output.PrintItem(cmd, result, groupcallDetailColumns)
 		},
 	}
 }
@@ -124,7 +112,7 @@ func newGroupcallsCreateCmd() *cobra.Command {
 		Use:   "create",
 		Short: "Create a new group call",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -135,27 +123,21 @@ func newGroupcallsCreateCmd() *cobra.Command {
 			ringMethod, _ := cmd.Flags().GetString("ring-method")
 			answerMethod, _ := cmd.Flags().GetString("answer-method")
 
-			body := voipbin_client.PostGroupcallsJSONRequestBody{
-				Source:       voipbin_client.CommonAddress{Target: &source},
-				Destinations: []voipbin_client.CommonAddress{{Target: &destination}},
-				FlowId:       flowID,
-				RingMethod:   voipbin_client.CallManagerGroupcallRingMethod(ringMethod),
-				AnswerMethod: voipbin_client.CallManagerGroupcallAnswerMethod(answerMethod),
-				Actions:      []voipbin_client.FlowManagerAction{},
+			body := map[string]interface{}{
+				"source":        map[string]interface{}{"target": source},
+				"destinations":  []map[string]interface{}{{"target": destination}},
+				"flow_id":       flowID,
+				"ring_method":   ringMethod,
+				"answer_method": answerMethod,
+				"actions":       []interface{}{},
 			}
 
-			resp, err := client.PostGroupcallsWithResponse(context.Background(), body)
+			result, err := c.Post(context.Background(), "/groupcalls", body)
 			if err != nil {
 				return fmt.Errorf("could not create group call: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, groupcallDetailColumns)
+			return output.PrintItem(cmd, result, groupcallDetailColumns)
 		},
 	}
 	cmd.Flags().String("source", "", "Source address")
@@ -174,17 +156,14 @@ func newGroupcallsDeleteCmd() *cobra.Command {
 		Short: "Delete a group call",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.DeleteGroupcallsIdWithResponse(context.Background(), args[0])
+			_, err = c.Delete(context.Background(), "/groupcalls/"+args[0])
 			if err != nil {
 				return fmt.Errorf("could not delete group call: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Group call %s deleted.\n", args[0])
@@ -199,17 +178,14 @@ func newGroupcallsHangupCmd() *cobra.Command {
 		Short: "Hang up a group call",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.PostGroupcallsIdHangupWithResponse(context.Background(), args[0])
+			_, err = c.Post(context.Background(), "/groupcalls/"+args[0]+"/hangup", nil)
 			if err != nil {
 				return fmt.Errorf("could not hangup group call: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Group call %s hung up.\n", args[0])

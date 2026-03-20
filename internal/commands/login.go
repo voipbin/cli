@@ -4,13 +4,12 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/voipbin/vn-cli/internal/client"
 	"github.com/voipbin/vn-cli/internal/config"
-	"github.com/voipbin/voipbin-go/gens/voipbin_client"
 )
 
 func newLoginCmd() *cobra.Command {
@@ -69,22 +68,10 @@ func runLogin(cmd *cobra.Command, args []string) error {
 
 	// Validate the access key by calling GetMe
 	fmt.Print("Validating access key... ")
-	client, err := voipbin_client.NewClientWithResponses(apiURL, func(c *voipbin_client.Client) error {
-		c.Client = &http.Client{
-			Transport: &loginTransport{accessKey: accessKey},
-		}
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create client: %w", err)
-	}
-
-	resp, err := client.GetMeWithResponse(context.Background())
+	c := client.New(apiURL, accessKey)
+	_, err := c.Get(context.Background(), "/me")
 	if err != nil {
 		return fmt.Errorf("validation failed: %w", err)
-	}
-	if resp.StatusCode() != 200 {
-		return fmt.Errorf("validation failed: API returned %s", resp.Status())
 	}
 	fmt.Println("OK")
 
@@ -133,18 +120,4 @@ func runLogout(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("Profile %q removed.\n", profileName)
 	return nil
-}
-
-type loginTransport struct {
-	accessKey string
-}
-
-func (t *loginTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	newURL := *req.URL
-	query := newURL.Query()
-	query.Set("accesskey", t.accessKey)
-	newURL.RawQuery = query.Encode()
-	newReq := req.Clone(req.Context())
-	newReq.URL = &newURL
-	return http.DefaultClient.Do(newReq)
 }

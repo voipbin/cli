@@ -3,12 +3,14 @@ package output
 import (
 	"encoding/json"
 	"fmt"
-	"os"
+	"io"
 
 	"github.com/olekukonko/tablewriter"
 )
 
-type TableFormatter struct{}
+type TableFormatter struct {
+	Writer io.Writer
+}
 
 func (f *TableFormatter) FormatList(data interface{}, columns []Column) error {
 	rows, err := toRows(data, columns)
@@ -17,7 +19,7 @@ func (f *TableFormatter) FormatList(data interface{}, columns []Column) error {
 	}
 
 	if len(rows) == 0 {
-		fmt.Fprintln(os.Stdout, "No items found.")
+		fmt.Fprintln(f.Writer, "No items found.")
 		return nil
 	}
 
@@ -26,7 +28,7 @@ func (f *TableFormatter) FormatList(data interface{}, columns []Column) error {
 		headers[i] = c.Name
 	}
 
-	table := tablewriter.NewWriter(os.Stdout)
+	table := tablewriter.NewWriter(f.Writer)
 	table.SetHeader(headers)
 	table.SetAutoWrapText(false)
 	table.SetAutoFormatHeaders(true)
@@ -58,7 +60,7 @@ func (f *TableFormatter) FormatItem(data interface{}, columns []Column) error {
 	}
 
 	for i, c := range columns {
-		fmt.Fprintf(os.Stdout, "%-*s  %s\n", maxWidth, c.Name+":", row[i])
+		fmt.Fprintf(f.Writer, "%-*s  %s\n", maxWidth, c.Name+":", row[i])
 	}
 	return nil
 }

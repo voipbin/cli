@@ -3,10 +3,11 @@ package commands
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	"github.com/voipbin/vn-cli/internal/auth"
-	"github.com/voipbin/voipbin-go/gens/voipbin_client"
 )
 
 func newAvailableNumbersCmd() *cobra.Command {
@@ -23,7 +24,7 @@ func newAvailableNumbersListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List available phone numbers",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -31,27 +32,21 @@ func newAvailableNumbersListCmd() *cobra.Command {
 			countryCode, _ := cmd.Flags().GetString("country-code")
 			pageSize, _ := cmd.Flags().GetInt("page-size")
 
-			params := &voipbin_client.GetAvailableNumbersParams{
-				CountryCode: countryCode,
-			}
+			params := url.Values{}
+			params.Set("country_code", countryCode)
 			if pageSize > 0 {
-				ps := pageSize
-				params.PageSize = &ps
+				params.Set("page_size", strconv.Itoa(pageSize))
 			}
 
-			resp, err := client.GetAvailableNumbersWithResponse(context.Background(), params)
+			items, _, err := c.List(context.Background(), "/available_numbers", params)
 			if err != nil {
 				return fmt.Errorf("could not list available numbers: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil || resp.JSON200.Result == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			for _, n := range *resp.JSON200.Result {
-				fmt.Fprintln(cmd.OutOrStdout(), string(n))
+			for _, item := range items {
+				if n, ok := item["number"]; ok {
+					fmt.Fprintln(cmd.OutOrStdout(), n)
+				}
 			}
 			return nil
 		},

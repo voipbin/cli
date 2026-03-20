@@ -3,11 +3,12 @@ package commands
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	"github.com/voipbin/vn-cli/internal/auth"
 	"github.com/voipbin/vn-cli/internal/output"
-	"github.com/voipbin/voipbin-go/gens/voipbin_client"
 )
 
 func newNumbersCmd() *cobra.Command {
@@ -55,7 +56,7 @@ func newNumbersListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List phone numbers",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -63,31 +64,24 @@ func newNumbersListCmd() *cobra.Command {
 			pageToken, _ := cmd.Flags().GetString("page-token")
 			pageSize, _ := cmd.Flags().GetInt("page-size")
 
-			params := &voipbin_client.GetNumbersParams{}
+			params := url.Values{}
 			if pageToken != "" {
-				params.PageToken = &pageToken
+				params.Set("page_token", pageToken)
 			}
 			if pageSize > 0 {
-				ps := pageSize
-				params.PageSize = &ps
+				params.Set("page_size", strconv.Itoa(pageSize))
 			}
 
-			resp, err := client.GetNumbersWithResponse(context.Background(), params)
+			items, nextToken, err := c.List(context.Background(), "/numbers", params)
 			if err != nil {
 				return fmt.Errorf("could not list numbers: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil || resp.JSON200.Result == nil {
-				return fmt.Errorf("unexpected empty response")
+
+			if nextToken != "" {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", nextToken)
 			}
 
-			if resp.JSON200.NextPageToken != nil && *resp.JSON200.NextPageToken != "" {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", *resp.JSON200.NextPageToken)
-			}
-
-			return output.PrintList(cmd, *resp.JSON200.Result, numberListColumns)
+			return output.PrintList(cmd, items, numberListColumns)
 		},
 	}
 	cmd.Flags().String("page-token", "", "Pagination token")
@@ -101,23 +95,17 @@ func newNumbersGetCmd() *cobra.Command {
 		Short: "Get a phone number by ID",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.GetNumbersIdWithResponse(context.Background(), args[0])
+			result, err := c.Get(context.Background(), "/numbers/"+args[0])
 			if err != nil {
 				return fmt.Errorf("could not get number: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, numberDetailColumns)
+			return output.PrintItem(cmd, result, numberDetailColumns)
 		},
 	}
 }
@@ -127,41 +115,48 @@ func newNumbersCreateCmd() *cobra.Command {
 		Use:   "create",
 		Short: "Create (purchase) a phone number",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
+			number, _ := cmd.Flags().GetString("number")
 			name, _ := cmd.Flags().GetString("name")
 			detail, _ := cmd.Flags().GetString("detail")
+			numberType, _ := cmd.Flags().GetString("type")
 			callFlowID, _ := cmd.Flags().GetString("call-flow-id")
 			messageFlowID, _ := cmd.Flags().GetString("message-flow-id")
 
-			body := voipbin_client.PostNumbersJSONRequestBody{
-				Name:          name,
-				Detail:        detail,
-				CallFlowId:    callFlowID,
-				MessageFlowId: messageFlowID,
+			body := map[string]interface{}{
+				"number":          number,
+				"name":            name,
+				"detail":          detail,
+				"call_flow_id":    callFlowID,
+				"message_flow_id": messageFlowID,
+			}
+			if numberType != "" {
+				body["type"] = numberType
 			}
 
-			resp, err := client.PostNumbersWithResponse(context.Background(), body)
+			result, err := c.Post(context.Background(), "/numbers", body)
 			if err != nil {
 				return fmt.Errorf("could not create number: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, numberDetailColumns)
+			return output.PrintItem(cmd, result, numberDetailColumns)
 		},
 	}
+	cmd.Flags().String("number", "", "Phone number to purchase")
 	cmd.Flags().String("name", "", "Number name")
 	cmd.Flags().String("detail", "", "Number detail")
+	cmd.Flags().String("type", "", "Number type (normal or virtual)")
 	cmd.Flags().String("call-flow-id", "", "Call flow ID")
 	cmd.Flags().String("message-flow-id", "", "Message flow ID")
+	_ = cmd.MarkFlagRequired("number")
+	_ = cmd.MarkFlagRequired("name")
+	_ = cmd.MarkFlagRequired("detail")
+	_ = cmd.MarkFlagRequired("call-flow-id")
+	_ = cmd.MarkFlagRequired("message-flow-id")
 	return cmd
 }
 
@@ -171,7 +166,7 @@ func newNumbersUpdateCmd() *cobra.Command {
 		Short: "Update a phone number",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -181,25 +176,26 @@ func newNumbersUpdateCmd() *cobra.Command {
 			callFlowID, _ := cmd.Flags().GetString("call-flow-id")
 			messageFlowID, _ := cmd.Flags().GetString("message-flow-id")
 
-			body := voipbin_client.PutNumbersIdJSONRequestBody{
-				Name:          name,
-				Detail:        detail,
-				CallFlowId:    callFlowID,
-				MessageFlowId: messageFlowID,
+			body := map[string]interface{}{}
+			if name != "" {
+				body["name"] = name
+			}
+			if detail != "" {
+				body["detail"] = detail
+			}
+			if callFlowID != "" {
+				body["call_flow_id"] = callFlowID
+			}
+			if messageFlowID != "" {
+				body["message_flow_id"] = messageFlowID
 			}
 
-			resp, err := client.PutNumbersIdWithResponse(context.Background(), args[0], body)
+			result, err := c.Put(context.Background(), "/numbers/"+args[0], body)
 			if err != nil {
 				return fmt.Errorf("could not update number: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, numberDetailColumns)
+			return output.PrintItem(cmd, result, numberDetailColumns)
 		},
 	}
 	cmd.Flags().String("name", "", "Number name")
@@ -215,17 +211,13 @@ func newNumbersDeleteCmd() *cobra.Command {
 		Short: "Delete a phone number",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.DeleteNumbersIdWithResponse(context.Background(), args[0])
-			if err != nil {
+			if _, err := c.Delete(context.Background(), "/numbers/"+args[0]); err != nil {
 				return fmt.Errorf("could not delete number: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Number %s deleted.\n", args[0])
@@ -236,28 +228,25 @@ func newNumbersDeleteCmd() *cobra.Command {
 
 func newNumbersRenewCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "renew",
+		Use:   "renew <id>",
 		Short: "Renew a phone number",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
 			tmRenew, _ := cmd.Flags().GetString("tm-renew")
-			body := voipbin_client.PostNumbersRenewJSONRequestBody{
-				TmRenew: tmRenew,
+			body := map[string]interface{}{
+				"tm_renew": tmRenew,
 			}
 
-			resp, err := client.PostNumbersRenewWithResponse(context.Background(), body)
-			if err != nil {
+			if _, err := c.Post(context.Background(), "/numbers/"+args[0]+"/renew", body); err != nil {
 				return fmt.Errorf("could not renew number: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "Number renewal scheduled.\n")
+			fmt.Fprintf(cmd.OutOrStdout(), "Number %s renewal scheduled.\n", args[0])
 			return nil
 		},
 	}
@@ -272,7 +261,7 @@ func newNumbersUpdateFlowIDsCmd() *cobra.Command {
 		Short: "Update flow IDs for a phone number",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -280,23 +269,20 @@ func newNumbersUpdateFlowIDsCmd() *cobra.Command {
 			callFlowID, _ := cmd.Flags().GetString("call-flow-id")
 			messageFlowID, _ := cmd.Flags().GetString("message-flow-id")
 
-			body := voipbin_client.PutNumbersIdFlowIdsJSONRequestBody{
-				CallFlowId:    callFlowID,
-				MessageFlowId: messageFlowID,
+			body := map[string]interface{}{}
+			if callFlowID != "" {
+				body["call_flow_id"] = callFlowID
+			}
+			if messageFlowID != "" {
+				body["message_flow_id"] = messageFlowID
 			}
 
-			resp, err := client.PutNumbersIdFlowIdsWithResponse(context.Background(), args[0], body)
+			result, err := c.Put(context.Background(), "/numbers/"+args[0]+"/flow_ids", body)
 			if err != nil {
 				return fmt.Errorf("could not update flow IDs: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, numberDetailColumns)
+			return output.PrintItem(cmd, result, numberDetailColumns)
 		},
 	}
 	cmd.Flags().String("call-flow-id", "", "Call flow ID")

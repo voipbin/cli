@@ -3,11 +3,12 @@ package commands
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	"github.com/voipbin/vn-cli/internal/auth"
 	"github.com/voipbin/vn-cli/internal/output"
-	"github.com/voipbin/voipbin-go/gens/voipbin_client"
 )
 
 func newConversationsCmd() *cobra.Command {
@@ -61,35 +62,27 @@ func newConversationsListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List conversations",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 			pageToken, _ := cmd.Flags().GetString("page-token")
 			pageSize, _ := cmd.Flags().GetInt("page-size")
-			params := &voipbin_client.GetConversationsParams{}
+			params := url.Values{}
 			if pageToken != "" {
-				params.PageToken = &pageToken
+				params.Set("page_token", pageToken)
 			}
 			if pageSize > 0 {
-				ps := pageSize
-				params.PageSize = &ps
+				params.Set("page_size", strconv.Itoa(pageSize))
 			}
-			body := voipbin_client.GetConversationsJSONRequestBody{}
-			resp, err := client.GetConversationsWithResponse(context.Background(), params, body)
+			items, nextToken, err := c.List(context.Background(), "/conversations", params)
 			if err != nil {
 				return fmt.Errorf("could not list conversations: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
+			if nextToken != "" {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", nextToken)
 			}
-			if resp.JSON200 == nil || resp.JSON200.Result == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
-			if resp.JSON200.NextPageToken != nil && *resp.JSON200.NextPageToken != "" {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", *resp.JSON200.NextPageToken)
-			}
-			return output.PrintList(cmd, *resp.JSON200.Result, conversationListColumns)
+			return output.PrintList(cmd, items, conversationListColumns)
 		},
 	}
 	cmd.Flags().String("page-token", "", "Pagination token")
@@ -103,21 +96,15 @@ func newConversationsGetCmd() *cobra.Command {
 		Short: "Get a conversation by ID",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetConversationsIdWithResponse(context.Background(), args[0])
+			item, err := c.Get(context.Background(), "/conversations/"+args[0])
 			if err != nil {
 				return fmt.Errorf("could not get conversation: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
-			return output.PrintItem(cmd, resp.JSON200, conversationDetailColumns)
+			return output.PrintItem(cmd, item, conversationDetailColumns)
 		},
 	}
 }
@@ -128,7 +115,7 @@ func newConversationsUpdateCmd() *cobra.Command {
 		Short: "Update a conversation",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -136,30 +123,24 @@ func newConversationsUpdateCmd() *cobra.Command {
 			detail, _ := cmd.Flags().GetString("detail")
 			ownerID, _ := cmd.Flags().GetString("owner-id")
 			ownerType, _ := cmd.Flags().GetString("owner-type")
-			body := voipbin_client.PutConversationsIdJSONRequestBody{}
+			body := map[string]interface{}{}
 			if name != "" {
-				body.Name = &name
+				body["name"] = name
 			}
 			if detail != "" {
-				body.Detail = &detail
+				body["detail"] = detail
 			}
 			if ownerID != "" {
-				body.OwnerId = &ownerID
+				body["owner_id"] = ownerID
 			}
 			if ownerType != "" {
-				body.OwnerType = &ownerType
+				body["owner_type"] = ownerType
 			}
-			resp, err := client.PutConversationsIdWithResponse(context.Background(), args[0], body)
+			item, err := c.Put(context.Background(), "/conversations/"+args[0], body)
 			if err != nil {
 				return fmt.Errorf("could not update conversation: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
-			return output.PrintItem(cmd, resp.JSON200, conversationDetailColumns)
+			return output.PrintItem(cmd, item, conversationDetailColumns)
 		},
 	}
 	cmd.Flags().String("name", "", "New name")
@@ -175,34 +156,27 @@ func newConversationsListMessagesCmd() *cobra.Command {
 		Short: "List messages in a conversation",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 			pageToken, _ := cmd.Flags().GetString("page-token")
 			pageSize, _ := cmd.Flags().GetInt("page-size")
-			params := &voipbin_client.GetConversationsIdMessagesParams{}
+			params := url.Values{}
 			if pageToken != "" {
-				params.PageToken = &pageToken
+				params.Set("page_token", pageToken)
 			}
 			if pageSize > 0 {
-				ps := pageSize
-				params.PageSize = &ps
+				params.Set("page_size", strconv.Itoa(pageSize))
 			}
-			resp, err := client.GetConversationsIdMessagesWithResponse(context.Background(), args[0], params)
+			items, nextToken, err := c.List(context.Background(), "/conversations/"+args[0]+"/messages", params)
 			if err != nil {
 				return fmt.Errorf("could not list messages: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
+			if nextToken != "" {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", nextToken)
 			}
-			if resp.JSON200 == nil || resp.JSON200.Result == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
-			if resp.JSON200.NextPageToken != nil && *resp.JSON200.NextPageToken != "" {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", *resp.JSON200.NextPageToken)
-			}
-			return output.PrintList(cmd, *resp.JSON200.Result, conversationMessageColumns)
+			return output.PrintList(cmd, items, conversationMessageColumns)
 		},
 	}
 	cmd.Flags().String("page-token", "", "Pagination token")
@@ -216,26 +190,20 @@ func newConversationsCreateMessageCmd() *cobra.Command {
 		Short: "Create a message in a conversation",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 			text, _ := cmd.Flags().GetString("text")
-			body := voipbin_client.PostConversationsIdMessagesJSONRequestBody{
-				Text:   text,
-				Medias: []voipbin_client.ConversationManagerMedia{},
+			body := map[string]interface{}{
+				"text":   text,
+				"medias": []interface{}{},
 			}
-			resp, err := client.PostConversationsIdMessagesWithResponse(context.Background(), args[0], body)
+			item, err := c.Post(context.Background(), "/conversations/"+args[0]+"/messages", body)
 			if err != nil {
 				return fmt.Errorf("could not create message: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
-			return output.PrintItem(cmd, resp.JSON200, conversationMessageColumns)
+			return output.PrintItem(cmd, item, conversationMessageColumns)
 		},
 	}
 	cmd.Flags().String("text", "", "Message text")

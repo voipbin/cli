@@ -3,11 +3,12 @@ package commands
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	"github.com/voipbin/vn-cli/internal/auth"
 	"github.com/voipbin/vn-cli/internal/output"
-	"github.com/voipbin/voipbin-go/gens/voipbin_client"
 )
 
 func newAimessagesCmd() *cobra.Command {
@@ -47,7 +48,7 @@ func newAimessagesListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List AI messages",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -56,33 +57,25 @@ func newAimessagesListCmd() *cobra.Command {
 			pageSize, _ := cmd.Flags().GetInt("page-size")
 			aicallID, _ := cmd.Flags().GetString("aicall-id")
 
-			params := &voipbin_client.GetAimessagesParams{
-				AicallId: aicallID,
-			}
+			params := url.Values{}
+			params.Set("aicall_id", aicallID)
 			if pageToken != "" {
-				params.PageToken = &pageToken
+				params.Set("page_token", pageToken)
 			}
 			if pageSize > 0 {
-				ps := pageSize
-				params.PageSize = &ps
+				params.Set("page_size", strconv.Itoa(pageSize))
 			}
 
-			resp, err := client.GetAimessagesWithResponse(context.Background(), params)
+			items, nextToken, err := c.List(context.Background(), "/aimessages", params)
 			if err != nil {
 				return fmt.Errorf("could not list AI messages: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil || resp.JSON200.Result == nil {
-				return fmt.Errorf("unexpected empty response")
+
+			if nextToken != "" {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", nextToken)
 			}
 
-			if resp.JSON200.NextPageToken != nil && *resp.JSON200.NextPageToken != "" {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", *resp.JSON200.NextPageToken)
-			}
-
-			return output.PrintList(cmd, *resp.JSON200.Result, aimessageListColumns)
+			return output.PrintList(cmd, items, aimessageListColumns)
 		},
 	}
 	cmd.Flags().String("page-token", "", "Pagination token")
@@ -98,23 +91,17 @@ func newAimessagesGetCmd() *cobra.Command {
 		Short: "Get an AI message by ID",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.GetAimessagesIdWithResponse(context.Background(), args[0])
+			result, err := c.Get(context.Background(), "/aimessages/"+args[0])
 			if err != nil {
 				return fmt.Errorf("could not get AI message: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, aimessageDetailColumns)
+			return output.PrintItem(cmd, result, aimessageDetailColumns)
 		},
 	}
 }
@@ -124,7 +111,7 @@ func newAimessagesCreateCmd() *cobra.Command {
 		Use:   "create",
 		Short: "Create a new AI message",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -133,24 +120,18 @@ func newAimessagesCreateCmd() *cobra.Command {
 			content, _ := cmd.Flags().GetString("content")
 			role, _ := cmd.Flags().GetString("role")
 
-			body := voipbin_client.PostAimessagesJSONRequestBody{
-				AicallId: aicallID,
-				Content:  content,
-				Role:     voipbin_client.AIManagerMessageRole(role),
+			body := map[string]interface{}{
+				"aicall_id": aicallID,
+				"content":   content,
+				"role":      role,
 			}
 
-			resp, err := client.PostAimessagesWithResponse(context.Background(), body)
+			result, err := c.Post(context.Background(), "/aimessages", body)
 			if err != nil {
 				return fmt.Errorf("could not create AI message: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, aimessageDetailColumns)
+			return output.PrintItem(cmd, result, aimessageDetailColumns)
 		},
 	}
 	cmd.Flags().String("aicall-id", "", "AI call ID")
@@ -168,17 +149,14 @@ func newAimessagesDeleteCmd() *cobra.Command {
 		Short: "Delete an AI message",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.DeleteAimessagesIdWithResponse(context.Background(), args[0])
+			_, err = c.Delete(context.Background(), "/aimessages/"+args[0])
 			if err != nil {
 				return fmt.Errorf("could not delete AI message: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "AI message %s deleted.\n", args[0])

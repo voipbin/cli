@@ -3,12 +3,12 @@ package commands
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strconv"
 
-	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	"github.com/voipbin/vn-cli/internal/auth"
 	"github.com/voipbin/vn-cli/internal/output"
-	"github.com/voipbin/voipbin-go/gens/voipbin_client"
 )
 
 func newBillingsCmd() *cobra.Command {
@@ -50,7 +50,7 @@ func newBillingsListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List billings",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -58,31 +58,24 @@ func newBillingsListCmd() *cobra.Command {
 			pageToken, _ := cmd.Flags().GetString("page-token")
 			pageSize, _ := cmd.Flags().GetInt("page-size")
 
-			params := &voipbin_client.GetBillingsParams{}
+			params := url.Values{}
 			if pageToken != "" {
-				params.PageToken = &pageToken
+				params.Set("page_token", pageToken)
 			}
 			if pageSize > 0 {
-				ps := pageSize
-				params.PageSize = &ps
+				params.Set("page_size", strconv.Itoa(pageSize))
 			}
 
-			resp, err := client.GetBillingsWithResponse(context.Background(), params)
+			items, nextToken, err := c.List(context.Background(), "/billings", params)
 			if err != nil {
 				return fmt.Errorf("could not list billings: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil || resp.JSON200.Result == nil {
-				return fmt.Errorf("unexpected empty response")
+
+			if nextToken != "" {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", nextToken)
 			}
 
-			if resp.JSON200.NextPageToken != nil && *resp.JSON200.NextPageToken != "" {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", *resp.JSON200.NextPageToken)
-			}
-
-			return output.PrintList(cmd, *resp.JSON200.Result, billingListColumns)
+			return output.PrintList(cmd, items, billingListColumns)
 		},
 	}
 	cmd.Flags().String("page-token", "", "Pagination token")
@@ -96,28 +89,17 @@ func newBillingsGetCmd() *cobra.Command {
 		Short: "Get a billing by ID",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			id, err := uuid.Parse(args[0])
-			if err != nil {
-				return fmt.Errorf("invalid UUID: %w", err)
-			}
-
-			resp, err := client.GetBillingsBillingIdWithResponse(context.Background(), id)
+			result, err := c.Get(context.Background(), "/billings/"+args[0])
 			if err != nil {
 				return fmt.Errorf("could not get billing: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, billingDetailColumns)
+			return output.PrintItem(cmd, result, billingDetailColumns)
 		},
 	}
 }

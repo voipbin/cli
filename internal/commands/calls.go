@@ -3,11 +3,12 @@ package commands
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	"github.com/voipbin/vn-cli/internal/auth"
 	"github.com/voipbin/vn-cli/internal/output"
-	"github.com/voipbin/voipbin-go/gens/voipbin_client"
 )
 
 func newCallsCmd() *cobra.Command {
@@ -67,7 +68,7 @@ func newCallsListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List calls",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -75,31 +76,24 @@ func newCallsListCmd() *cobra.Command {
 			pageToken, _ := cmd.Flags().GetString("page-token")
 			pageSize, _ := cmd.Flags().GetInt("page-size")
 
-			params := &voipbin_client.GetCallsParams{}
+			params := url.Values{}
 			if pageToken != "" {
-				params.PageToken = &pageToken
+				params.Set("page_token", pageToken)
 			}
 			if pageSize > 0 {
-				ps := pageSize
-				params.PageSize = &ps
+				params.Set("page_size", strconv.Itoa(pageSize))
 			}
 
-			resp, err := client.GetCallsWithResponse(context.Background(), params)
+			items, nextToken, err := c.List(context.Background(), "/calls", params)
 			if err != nil {
 				return fmt.Errorf("could not list calls: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil || resp.JSON200.Result == nil {
-				return fmt.Errorf("unexpected empty response")
+
+			if nextToken != "" {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", nextToken)
 			}
 
-			if resp.JSON200.NextPageToken != nil && *resp.JSON200.NextPageToken != "" {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", *resp.JSON200.NextPageToken)
-			}
-
-			return output.PrintList(cmd, *resp.JSON200.Result, callListColumns)
+			return output.PrintList(cmd, items, callListColumns)
 		},
 	}
 	cmd.Flags().String("page-token", "", "Pagination token")
@@ -113,23 +107,17 @@ func newCallsGetCmd() *cobra.Command {
 		Short: "Get a call by ID",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.GetCallsIdWithResponse(context.Background(), args[0])
+			result, err := c.Get(context.Background(), "/calls/"+args[0])
 			if err != nil {
 				return fmt.Errorf("could not get call: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, callDetailColumns)
+			return output.PrintItem(cmd, result, callDetailColumns)
 		},
 	}
 }
@@ -139,7 +127,7 @@ func newCallsCreateCmd() *cobra.Command {
 		Use:   "create",
 		Short: "Create a new call",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -148,26 +136,20 @@ func newCallsCreateCmd() *cobra.Command {
 			destination, _ := cmd.Flags().GetString("destination")
 			flowID, _ := cmd.Flags().GetString("flow-id")
 
-			body := voipbin_client.PostCallsJSONRequestBody{
-				Source:       &voipbin_client.CommonAddress{Target: &source},
-				Destinations: &[]voipbin_client.CommonAddress{{Target: &destination}},
+			body := map[string]interface{}{
+				"source":       map[string]interface{}{"target": source},
+				"destinations": []map[string]interface{}{{"target": destination}},
 			}
 			if flowID != "" {
-				body.FlowId = &flowID
+				body["flow_id"] = flowID
 			}
 
-			resp, err := client.PostCallsWithResponse(context.Background(), body)
+			result, err := c.Post(context.Background(), "/calls", body)
 			if err != nil {
 				return fmt.Errorf("could not create call: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, callDetailColumns)
+			return output.PrintItem(cmd, result, callDetailColumns)
 		},
 	}
 	cmd.Flags().String("source", "", "Source address")
@@ -184,17 +166,14 @@ func newCallsDeleteCmd() *cobra.Command {
 		Short: "Delete a call",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.DeleteCallsIdWithResponse(context.Background(), args[0])
+			_, err = c.Delete(context.Background(), "/calls/"+args[0])
 			if err != nil {
 				return fmt.Errorf("could not delete call: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Call %s deleted.\n", args[0])
@@ -209,17 +188,14 @@ func newCallsHangupCmd() *cobra.Command {
 		Short: "Hang up a call",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.PostCallsIdHangupWithResponse(context.Background(), args[0])
+			_, err = c.Post(context.Background(), "/calls/"+args[0]+"/hangup", nil)
 			if err != nil {
 				return fmt.Errorf("could not hangup call: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Call %s hung up.\n", args[0])
@@ -234,17 +210,14 @@ func newCallsHoldCmd() *cobra.Command {
 		Short: "Put a call on hold",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.PostCallsIdHoldWithResponse(context.Background(), args[0])
+			_, err = c.Post(context.Background(), "/calls/"+args[0]+"/hold", nil)
 			if err != nil {
 				return fmt.Errorf("could not hold call: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Call %s on hold.\n", args[0])
@@ -259,17 +232,14 @@ func newCallsUnholdCmd() *cobra.Command {
 		Short: "Resume a held call",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.DeleteCallsIdHoldWithResponse(context.Background(), args[0])
+			_, err = c.Delete(context.Background(), "/calls/"+args[0]+"/hold")
 			if err != nil {
 				return fmt.Errorf("could not unhold call: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Call %s resumed.\n", args[0])
@@ -284,17 +254,14 @@ func newCallsMuteCmd() *cobra.Command {
 		Short: "Mute a call",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.PostCallsIdMuteWithResponse(context.Background(), args[0], voipbin_client.PostCallsIdMuteJSONRequestBody{})
+			_, err = c.Post(context.Background(), "/calls/"+args[0]+"/mute", map[string]interface{}{})
 			if err != nil {
 				return fmt.Errorf("could not mute call: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Call %s muted.\n", args[0])
@@ -309,17 +276,14 @@ func newCallsUnmuteCmd() *cobra.Command {
 		Short: "Unmute a call",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.DeleteCallsIdMuteWithResponse(context.Background(), args[0], voipbin_client.DeleteCallsIdMuteJSONRequestBody{})
+			_, err = c.Delete(context.Background(), "/calls/"+args[0]+"/mute")
 			if err != nil {
 				return fmt.Errorf("could not unmute call: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Call %s unmuted.\n", args[0])
@@ -334,17 +298,14 @@ func newCallsSilenceCmd() *cobra.Command {
 		Short: "Silence a call",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.PostCallsIdSilenceWithResponse(context.Background(), args[0])
+			_, err = c.Post(context.Background(), "/calls/"+args[0]+"/silence", nil)
 			if err != nil {
 				return fmt.Errorf("could not silence call: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Call %s silenced.\n", args[0])
@@ -359,17 +320,14 @@ func newCallsUnsilenceCmd() *cobra.Command {
 		Short: "Unsilence a call",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.DeleteCallsIdSilenceWithResponse(context.Background(), args[0])
+			_, err = c.Delete(context.Background(), "/calls/"+args[0]+"/silence")
 			if err != nil {
 				return fmt.Errorf("could not unsilence call: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Call %s unsilenced.\n", args[0])
@@ -384,17 +342,14 @@ func newCallsMohCmd() *cobra.Command {
 		Short: "Start music on hold",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.PostCallsIdMohWithResponse(context.Background(), args[0])
+			_, err = c.Post(context.Background(), "/calls/"+args[0]+"/moh", nil)
 			if err != nil {
 				return fmt.Errorf("could not start MOH: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Call %s MOH started.\n", args[0])
@@ -409,17 +364,14 @@ func newCallsUnmohCmd() *cobra.Command {
 		Short: "Stop music on hold",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.DeleteCallsIdMohWithResponse(context.Background(), args[0])
+			_, err = c.Delete(context.Background(), "/calls/"+args[0]+"/moh")
 			if err != nil {
 				return fmt.Errorf("could not stop MOH: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Call %s MOH stopped.\n", args[0])
@@ -434,17 +386,14 @@ func newCallsRecordingStartCmd() *cobra.Command {
 		Short: "Start recording a call",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.PostCallsIdRecordingStartWithResponse(context.Background(), args[0], voipbin_client.PostCallsIdRecordingStartJSONRequestBody{})
+			_, err = c.Post(context.Background(), "/calls/"+args[0]+"/recording_start", map[string]interface{}{})
 			if err != nil {
 				return fmt.Errorf("could not start recording: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Call %s recording started.\n", args[0])
@@ -459,17 +408,14 @@ func newCallsRecordingStopCmd() *cobra.Command {
 		Short: "Stop recording a call",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.PostCallsIdRecordingStopWithResponse(context.Background(), args[0])
+			_, err = c.Post(context.Background(), "/calls/"+args[0]+"/recording_stop", nil)
 			if err != nil {
 				return fmt.Errorf("could not stop recording: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Call %s recording stopped.\n", args[0])
@@ -484,17 +430,14 @@ func newCallsTalkCmd() *cobra.Command {
 		Short: "Send talk command to a call",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.PostCallsIdTalkWithResponse(context.Background(), args[0], voipbin_client.PostCallsIdTalkJSONRequestBody{})
+			_, err = c.Post(context.Background(), "/calls/"+args[0]+"/talk", map[string]interface{}{})
 			if err != nil {
 				return fmt.Errorf("could not send talk: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Call %s talk sent.\n", args[0])

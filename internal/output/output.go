@@ -3,7 +3,7 @@ package output
 import (
 	"encoding/json"
 	"fmt"
-	"os"
+	"io"
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -20,14 +20,14 @@ type Formatter interface {
 	FormatItem(data interface{}, columns []Column) error
 }
 
-func NewFormatter(format string) (Formatter, error) {
+func NewFormatter(format string, w io.Writer) (Formatter, error) {
 	switch format {
 	case "table", "":
-		return &TableFormatter{}, nil
+		return &TableFormatter{Writer: w}, nil
 	case "json":
-		return &JSONFormatter{}, nil
+		return &JSONFormatter{Writer: w}, nil
 	case "yaml":
-		return &YAMLFormatter{}, nil
+		return &YAMLFormatter{Writer: w}, nil
 	default:
 		return nil, fmt.Errorf("unsupported output format: %s", format)
 	}
@@ -40,7 +40,8 @@ func GetFormat(cmd *cobra.Command) string {
 
 func PrintList(cmd *cobra.Command, data interface{}, columns []Column) error {
 	format := GetFormat(cmd)
-	formatter, err := NewFormatter(format)
+	w := cmd.OutOrStdout()
+	formatter, err := NewFormatter(format, w)
 	if err != nil {
 		return err
 	}
@@ -49,7 +50,8 @@ func PrintList(cmd *cobra.Command, data interface{}, columns []Column) error {
 
 func PrintItem(cmd *cobra.Command, data interface{}, columns []Column) error {
 	format := GetFormat(cmd)
-	formatter, err := NewFormatter(format)
+	w := cmd.OutOrStdout()
+	formatter, err := NewFormatter(format, w)
 	if err != nil {
 		return err
 	}
@@ -60,16 +62,16 @@ func marshalJSON(data interface{}) ([]byte, error) {
 	return json.MarshalIndent(data, "", "  ")
 }
 
-func printJSON(data interface{}) error {
+func printJSON(w io.Writer, data interface{}) error {
 	b, err := marshalJSON(data)
 	if err != nil {
 		return fmt.Errorf("could not marshal JSON: %w", err)
 	}
-	fmt.Fprintln(os.Stdout, string(b))
+	fmt.Fprintln(w, string(b))
 	return nil
 }
 
-func printYAML(data interface{}) error {
+func printYAML(w io.Writer, data interface{}) error {
 	// Convert through JSON to handle pointer fields properly
 	b, err := json.Marshal(data)
 	if err != nil {
@@ -83,6 +85,6 @@ func printYAML(data interface{}) error {
 	if err != nil {
 		return fmt.Errorf("could not marshal YAML: %w", err)
 	}
-	fmt.Fprint(os.Stdout, string(out))
+	fmt.Fprint(w, string(out))
 	return nil
 }
