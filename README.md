@@ -1,6 +1,6 @@
 # vn
 
-Command-line interface for the [VoIPBIN](https://voipbin.net) API. Manage calls, messages, agents, campaigns, and 40+ resources from your terminal.
+Command-line interface for the [VoIPBIN](https://voipbin.net) API. Manage calls, messages, agents, campaigns, and 50+ resources from your terminal.
 
 ## Overview
 
@@ -37,10 +37,7 @@ curl -sSL https://github.com/voipbin/cli/releases/latest/download/vn-darwin-amd6
 
 ### Build from source
 
-Building from source requires the [voipbin-go](https://github.com/voipbin/voipbin-go) SDK as a sibling directory:
-
 ```bash
-git clone https://github.com/voipbin/voipbin-go.git
 git clone https://github.com/voipbin/cli.git
 cd cli && make build
 cp bin/vn /usr/local/bin/
@@ -144,6 +141,8 @@ All commands follow the pattern `vn <resource> <verb> [args] [flags]`.
 | `aicalls` | `list`, `get`, `create`, `delete` |
 | `aimessages` | `list`, `get`, `create`, `delete` |
 | `aisummaries` | `list`, `get`, `create`, `delete` |
+| `rags` | `list`, `get`, `create`, `update`, `delete`, `add-source` |
+| `speakings` | `list`, `get`, `create`, `delete`, `say`, `flush`, `stop` |
 
 ### Campaigns & Outbound
 
@@ -184,6 +183,8 @@ All commands follow the pattern `vn <resource> <verb> [args] [flags]`.
 | `customers` | `list`, `get`, `create`, `update`, `delete`, `update-billing-account` |
 | `accesskeys` | `list`, `get`, `create`, `update`, `delete` |
 | `tags` | `list`, `get`, `create`, `update`, `delete` |
+| `contacts` | `list`, `get`, `create`, `update`, `delete`, `lookup` |
+| `teams` | `list`, `get`, `create`, `update`, `delete` |
 
 ### Telecom
 
@@ -199,7 +200,9 @@ All commands follow the pattern `vn <resource> <verb> [args] [flags]`.
 | Resource | Verbs |
 |----------|-------|
 | `recordings` | `list`, `get`, `delete` |
+| `recordingfiles` | `get` |
 | `transcribes` | `list`, `get`, `create`, `delete`, `stop` |
+| `transcripts` | `list` |
 | `files` | `list`, `get`, `delete` |
 | `storage-accounts` | `list`, `get`, `create`, `delete` |
 | `storage-files` | `list`, `get`, `delete` |
@@ -210,6 +213,12 @@ All commands follow the pattern `vn <resource> <verb> [args] [flags]`.
 |----------|-------|
 | `billing-accounts` | `list`, `get`, `create`, `update`, `delete`, `balance-add`, `balance-subtract`, `update-payment-info` |
 | `billings` | `list`, `get` |
+
+### Analytics & Diagnostics
+
+| Resource | Verbs |
+|----------|-------|
+| `timelines` | `list-events`, `aggregated-events`, `sip-analysis`, `pcap` |
 
 ### Utility
 
