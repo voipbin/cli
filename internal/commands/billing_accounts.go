@@ -3,11 +3,12 @@ package commands
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	"github.com/voipbin/vn-cli/internal/auth"
 	"github.com/voipbin/vn-cli/internal/output"
-	"github.com/voipbin/voipbin-go/gens/voipbin_client"
 )
 
 func newBillingAccountsCmd() *cobra.Command {
@@ -53,7 +54,7 @@ func newBillingAccountsListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List billing accounts",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -61,31 +62,24 @@ func newBillingAccountsListCmd() *cobra.Command {
 			pageToken, _ := cmd.Flags().GetString("page-token")
 			pageSize, _ := cmd.Flags().GetInt("page-size")
 
-			params := &voipbin_client.GetBillingAccountsParams{}
+			params := url.Values{}
 			if pageToken != "" {
-				params.PageToken = &pageToken
+				params.Set("page_token", pageToken)
 			}
 			if pageSize > 0 {
-				ps := pageSize
-				params.PageSize = &ps
+				params.Set("page_size", strconv.Itoa(pageSize))
 			}
 
-			resp, err := client.GetBillingAccountsWithResponse(context.Background(), params)
+			items, nextToken, err := c.List(context.Background(), "/billing_accounts", params)
 			if err != nil {
 				return fmt.Errorf("could not list billing accounts: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil || resp.JSON200.Result == nil {
-				return fmt.Errorf("unexpected empty response")
+
+			if nextToken != "" {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", nextToken)
 			}
 
-			if resp.JSON200.NextPageToken != nil && *resp.JSON200.NextPageToken != "" {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", *resp.JSON200.NextPageToken)
-			}
-
-			return output.PrintList(cmd, *resp.JSON200.Result, billingAccountListColumns)
+			return output.PrintList(cmd, items, billingAccountListColumns)
 		},
 	}
 	cmd.Flags().String("page-token", "", "Pagination token")
@@ -99,23 +93,17 @@ func newBillingAccountsGetCmd() *cobra.Command {
 		Short: "Get a billing account by ID",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.GetBillingAccountsIdWithResponse(context.Background(), args[0])
+			result, err := c.Get(context.Background(), "/billing_accounts/"+args[0])
 			if err != nil {
 				return fmt.Errorf("could not get billing account: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, billingAccountDetailColumns)
+			return output.PrintItem(cmd, result, billingAccountDetailColumns)
 		},
 	}
 }
@@ -125,7 +113,7 @@ func newBillingAccountsCreateCmd() *cobra.Command {
 		Use:   "create",
 		Short: "Create a new billing account",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -133,26 +121,20 @@ func newBillingAccountsCreateCmd() *cobra.Command {
 			name, _ := cmd.Flags().GetString("name")
 			detail, _ := cmd.Flags().GetString("detail")
 
-			body := voipbin_client.PostBillingAccountsJSONRequestBody{}
+			body := map[string]interface{}{}
 			if name != "" {
-				body.Name = &name
+				body["name"] = name
 			}
 			if detail != "" {
-				body.Detail = &detail
+				body["detail"] = detail
 			}
 
-			resp, err := client.PostBillingAccountsWithResponse(context.Background(), body)
+			result, err := c.Post(context.Background(), "/billing_accounts", body)
 			if err != nil {
 				return fmt.Errorf("could not create billing account: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, billingAccountDetailColumns)
+			return output.PrintItem(cmd, result, billingAccountDetailColumns)
 		},
 	}
 	cmd.Flags().String("name", "", "Account name")
@@ -166,7 +148,7 @@ func newBillingAccountsUpdateCmd() *cobra.Command {
 		Short: "Update a billing account",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -174,26 +156,20 @@ func newBillingAccountsUpdateCmd() *cobra.Command {
 			name, _ := cmd.Flags().GetString("name")
 			detail, _ := cmd.Flags().GetString("detail")
 
-			body := voipbin_client.PutBillingAccountsIdJSONRequestBody{}
+			body := map[string]interface{}{}
 			if name != "" {
-				body.Name = &name
+				body["name"] = name
 			}
 			if detail != "" {
-				body.Detail = &detail
+				body["detail"] = detail
 			}
 
-			resp, err := client.PutBillingAccountsIdWithResponse(context.Background(), args[0], body)
+			result, err := c.Put(context.Background(), "/billing_accounts/"+args[0], body)
 			if err != nil {
 				return fmt.Errorf("could not update billing account: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, billingAccountDetailColumns)
+			return output.PrintItem(cmd, result, billingAccountDetailColumns)
 		},
 	}
 	cmd.Flags().String("name", "", "Account name")
@@ -207,17 +183,14 @@ func newBillingAccountsDeleteCmd() *cobra.Command {
 		Short: "Delete a billing account",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.DeleteBillingAccountsIdWithResponse(context.Background(), args[0])
+			_, err = c.Delete(context.Background(), "/billing_accounts/"+args[0])
 			if err != nil {
 				return fmt.Errorf("could not delete billing account: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Billing account %s deleted.\n", args[0])
@@ -232,28 +205,22 @@ func newBillingAccountsBalanceAddCmd() *cobra.Command {
 		Short: "Add balance to a billing account",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
 			amount, _ := cmd.Flags().GetFloat32("amount")
-			body := voipbin_client.PostBillingAccountsIdBalanceAddForceJSONRequestBody{
-				Balance: &amount,
+			body := map[string]interface{}{
+				"balance": amount,
 			}
 
-			resp, err := client.PostBillingAccountsIdBalanceAddForceWithResponse(context.Background(), args[0], body)
+			result, err := c.Post(context.Background(), "/billing_accounts/"+args[0]+"/balance_add_force", body)
 			if err != nil {
 				return fmt.Errorf("could not add balance: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, billingAccountDetailColumns)
+			return output.PrintItem(cmd, result, billingAccountDetailColumns)
 		},
 	}
 	cmd.Flags().Float32("amount", 0, "Amount to add (USD)")
@@ -267,28 +234,22 @@ func newBillingAccountsBalanceSubtractCmd() *cobra.Command {
 		Short: "Subtract balance from a billing account",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
 			amount, _ := cmd.Flags().GetFloat32("amount")
-			body := voipbin_client.PostBillingAccountsIdBalanceSubtractForceJSONRequestBody{
-				Balance: &amount,
+			body := map[string]interface{}{
+				"balance": amount,
 			}
 
-			resp, err := client.PostBillingAccountsIdBalanceSubtractForceWithResponse(context.Background(), args[0], body)
+			result, err := c.Post(context.Background(), "/billing_accounts/"+args[0]+"/balance_subtract_force", body)
 			if err != nil {
 				return fmt.Errorf("could not subtract balance: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, billingAccountDetailColumns)
+			return output.PrintItem(cmd, result, billingAccountDetailColumns)
 		},
 	}
 	cmd.Flags().Float32("amount", 0, "Amount to subtract (USD)")
@@ -302,7 +263,7 @@ func newBillingAccountsUpdatePaymentInfoCmd() *cobra.Command {
 		Short: "Update payment info for a billing account",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -310,28 +271,20 @@ func newBillingAccountsUpdatePaymentInfoCmd() *cobra.Command {
 			paymentMethod, _ := cmd.Flags().GetString("payment-method")
 			paymentType, _ := cmd.Flags().GetString("payment-type")
 
-			body := voipbin_client.PutBillingAccountsIdPaymentInfoJSONRequestBody{}
+			body := map[string]interface{}{}
 			if paymentMethod != "" {
-				pm := voipbin_client.BillingManagerAccountPaymentMethod(paymentMethod)
-				body.PaymentMethod = &pm
+				body["payment_method"] = paymentMethod
 			}
 			if paymentType != "" {
-				pt := voipbin_client.BillingManagerAccountPaymentType(paymentType)
-				body.PaymentType = &pt
+				body["payment_type"] = paymentType
 			}
 
-			resp, err := client.PutBillingAccountsIdPaymentInfoWithResponse(context.Background(), args[0], body)
+			result, err := c.Put(context.Background(), "/billing_accounts/"+args[0]+"/payment_info", body)
 			if err != nil {
 				return fmt.Errorf("could not update payment info: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, billingAccountDetailColumns)
+			return output.PrintItem(cmd, result, billingAccountDetailColumns)
 		},
 	}
 	cmd.Flags().String("payment-method", "", "Payment method")

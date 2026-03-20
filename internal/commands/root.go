@@ -37,12 +37,15 @@ func NewRootCmd() *cobra.Command {
 	cmd.AddCommand(newConferencecallsCmd())
 	cmd.AddCommand(newGroupcallsCmd())
 	cmd.AddCommand(newTransfersCmd())
+	cmd.AddCommand(newSpeakingsCmd())
 
 	// AI
 	cmd.AddCommand(newAisCmd())
 	cmd.AddCommand(newAicallsCmd())
 	cmd.AddCommand(newAimessagesCmd())
 	cmd.AddCommand(newAisummariesCmd())
+	cmd.AddCommand(newRagsCmd())
+	cmd.AddCommand(newTeamsCmd())
 
 	// Campaign/Outbound
 	cmd.AddCommand(newCampaignsCmd())
@@ -71,6 +74,7 @@ func NewRootCmd() *cobra.Command {
 	cmd.AddCommand(newCustomersCmd())
 	cmd.AddCommand(newAccesskeysCmd())
 	cmd.AddCommand(newTagsCmd())
+	cmd.AddCommand(newContactsCmd())
 
 	// Telecom
 	cmd.AddCommand(newNumbersCmd())
@@ -84,6 +88,9 @@ func NewRootCmd() *cobra.Command {
 	cmd.AddCommand(newFilesCmd())
 	cmd.AddCommand(newStorageAccountsCmd())
 	cmd.AddCommand(newStorageFilesCmd())
+	cmd.AddCommand(newTimelinesCmd())
+	cmd.AddCommand(newTranscriptsCmd())
+	cmd.AddCommand(newRecordingfilesCmd())
 
 	// Billing
 	cmd.AddCommand(newBillingAccountsCmd())

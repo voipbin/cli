@@ -3,11 +3,12 @@ package commands
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	"github.com/voipbin/vn-cli/internal/auth"
 	"github.com/voipbin/vn-cli/internal/output"
-	"github.com/voipbin/voipbin-go/gens/voipbin_client"
 )
 
 func newAisummariesCmd() *cobra.Command {
@@ -51,7 +52,7 @@ func newAisummariesListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List AI summaries",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -59,31 +60,24 @@ func newAisummariesListCmd() *cobra.Command {
 			pageToken, _ := cmd.Flags().GetString("page-token")
 			pageSize, _ := cmd.Flags().GetInt("page-size")
 
-			params := &voipbin_client.GetAisummariesParams{}
+			params := url.Values{}
 			if pageToken != "" {
-				params.PageToken = &pageToken
+				params.Set("page_token", pageToken)
 			}
 			if pageSize > 0 {
-				ps := pageSize
-				params.PageSize = &ps
+				params.Set("page_size", strconv.Itoa(pageSize))
 			}
 
-			resp, err := client.GetAisummariesWithResponse(context.Background(), params)
+			items, nextToken, err := c.List(context.Background(), "/aisummaries", params)
 			if err != nil {
 				return fmt.Errorf("could not list AI summaries: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil || resp.JSON200.Result == nil {
-				return fmt.Errorf("unexpected empty response")
+
+			if nextToken != "" {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", nextToken)
 			}
 
-			if resp.JSON200.NextPageToken != nil && *resp.JSON200.NextPageToken != "" {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", *resp.JSON200.NextPageToken)
-			}
-
-			return output.PrintList(cmd, *resp.JSON200.Result, aisummaryListColumns)
+			return output.PrintList(cmd, items, aisummaryListColumns)
 		},
 	}
 	cmd.Flags().String("page-token", "", "Pagination token")
@@ -97,23 +91,17 @@ func newAisummariesGetCmd() *cobra.Command {
 		Short: "Get an AI summary by ID",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.GetAisummariesIdWithResponse(context.Background(), args[0])
+			result, err := c.Get(context.Background(), "/aisummaries/"+args[0])
 			if err != nil {
 				return fmt.Errorf("could not get AI summary: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, aisummaryDetailColumns)
+			return output.PrintItem(cmd, result, aisummaryDetailColumns)
 		},
 	}
 }
@@ -123,7 +111,7 @@ func newAisummariesCreateCmd() *cobra.Command {
 		Use:   "create",
 		Short: "Create a new AI summary",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -133,25 +121,19 @@ func newAisummariesCreateCmd() *cobra.Command {
 			language, _ := cmd.Flags().GetString("language")
 			onEndFlowID, _ := cmd.Flags().GetString("on-end-flow-id")
 
-			body := voipbin_client.PostAisummariesJSONRequestBody{
-				ReferenceId:   referenceID,
-				ReferenceType: voipbin_client.AIManagerSummaryReferenceType(referenceType),
-				Language:      language,
-				OnEndFlowId:   onEndFlowID,
+			body := map[string]interface{}{
+				"reference_id":    referenceID,
+				"reference_type":  referenceType,
+				"language":        language,
+				"on_end_flow_id":  onEndFlowID,
 			}
 
-			resp, err := client.PostAisummariesWithResponse(context.Background(), body)
+			result, err := c.Post(context.Background(), "/aisummaries", body)
 			if err != nil {
 				return fmt.Errorf("could not create AI summary: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, aisummaryDetailColumns)
+			return output.PrintItem(cmd, result, aisummaryDetailColumns)
 		},
 	}
 	cmd.Flags().String("reference-id", "", "Reference ID")
@@ -169,17 +151,14 @@ func newAisummariesDeleteCmd() *cobra.Command {
 		Short: "Delete an AI summary",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.DeleteAisummariesIdWithResponse(context.Background(), args[0])
+			_, err = c.Delete(context.Background(), "/aisummaries/"+args[0])
 			if err != nil {
 				return fmt.Errorf("could not delete AI summary: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "AI summary %s deleted.\n", args[0])

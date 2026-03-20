@@ -3,11 +3,12 @@ package commands
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	"github.com/voipbin/vn-cli/internal/auth"
 	"github.com/voipbin/vn-cli/internal/output"
-	"github.com/voipbin/voipbin-go/gens/voipbin_client"
 )
 
 func newMessagesCmd() *cobra.Command {
@@ -46,7 +47,7 @@ func newMessagesListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List messages",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -54,31 +55,24 @@ func newMessagesListCmd() *cobra.Command {
 			pageToken, _ := cmd.Flags().GetString("page-token")
 			pageSize, _ := cmd.Flags().GetInt("page-size")
 
-			params := &voipbin_client.GetMessagesParams{}
+			params := url.Values{}
 			if pageToken != "" {
-				params.PageToken = &pageToken
+				params.Set("page_token", pageToken)
 			}
 			if pageSize > 0 {
-				ps := pageSize
-				params.PageSize = &ps
+				params.Set("page_size", strconv.Itoa(pageSize))
 			}
 
-			resp, err := client.GetMessagesWithResponse(context.Background(), params)
+			items, nextToken, err := c.List(context.Background(), "/messages", params)
 			if err != nil {
 				return fmt.Errorf("could not list messages: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil || resp.JSON200.Result == nil {
-				return fmt.Errorf("unexpected empty response")
+
+			if nextToken != "" {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", nextToken)
 			}
 
-			if resp.JSON200.NextPageToken != nil && *resp.JSON200.NextPageToken != "" {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", *resp.JSON200.NextPageToken)
-			}
-
-			return output.PrintList(cmd, *resp.JSON200.Result, messageListColumns)
+			return output.PrintList(cmd, items, messageListColumns)
 		},
 	}
 	cmd.Flags().String("page-token", "", "Pagination token")
@@ -92,23 +86,17 @@ func newMessagesGetCmd() *cobra.Command {
 		Short: "Get a message by ID",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.GetMessagesIdWithResponse(context.Background(), args[0])
+			result, err := c.Get(context.Background(), "/messages/"+args[0])
 			if err != nil {
 				return fmt.Errorf("could not get message: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, messageDetailColumns)
+			return output.PrintItem(cmd, result, messageDetailColumns)
 		},
 	}
 }
@@ -118,7 +106,7 @@ func newMessagesCreateCmd() *cobra.Command {
 		Use:   "create",
 		Short: "Create a new message",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -127,24 +115,18 @@ func newMessagesCreateCmd() *cobra.Command {
 			destination, _ := cmd.Flags().GetString("destination")
 			text, _ := cmd.Flags().GetString("text")
 
-			body := voipbin_client.PostMessagesJSONRequestBody{
-				Source:       voipbin_client.CommonAddress{Target: &source},
-				Destinations: []voipbin_client.CommonAddress{{Target: &destination}},
-				Text:         text,
+			body := map[string]interface{}{
+				"source":       map[string]interface{}{"target": source},
+				"destinations": []map[string]interface{}{{"target": destination}},
+				"text":         text,
 			}
 
-			resp, err := client.PostMessagesWithResponse(context.Background(), body)
+			result, err := c.Post(context.Background(), "/messages", body)
 			if err != nil {
 				return fmt.Errorf("could not create message: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, messageDetailColumns)
+			return output.PrintItem(cmd, result, messageDetailColumns)
 		},
 	}
 	cmd.Flags().String("source", "", "Source address")
@@ -162,17 +144,14 @@ func newMessagesDeleteCmd() *cobra.Command {
 		Short: "Delete a message",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.DeleteMessagesIdWithResponse(context.Background(), args[0])
+			_, err = c.Delete(context.Background(), "/messages/"+args[0])
 			if err != nil {
 				return fmt.Errorf("could not delete message: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Message %s deleted.\n", args[0])

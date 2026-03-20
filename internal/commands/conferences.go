@@ -3,11 +3,12 @@ package commands
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	"github.com/voipbin/vn-cli/internal/auth"
 	"github.com/voipbin/vn-cli/internal/output"
-	"github.com/voipbin/voipbin-go/gens/voipbin_client"
 )
 
 func newConferencesCmd() *cobra.Command {
@@ -58,7 +59,7 @@ func newConferencesListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List conferences",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -66,31 +67,24 @@ func newConferencesListCmd() *cobra.Command {
 			pageToken, _ := cmd.Flags().GetString("page-token")
 			pageSize, _ := cmd.Flags().GetInt("page-size")
 
-			params := &voipbin_client.GetConferencesParams{}
+			params := url.Values{}
 			if pageToken != "" {
-				params.PageToken = &pageToken
+				params.Set("page_token", pageToken)
 			}
 			if pageSize > 0 {
-				ps := pageSize
-				params.PageSize = &ps
+				params.Set("page_size", strconv.Itoa(pageSize))
 			}
 
-			resp, err := client.GetConferencesWithResponse(context.Background(), params)
+			items, nextToken, err := c.List(context.Background(), "/conferences", params)
 			if err != nil {
 				return fmt.Errorf("could not list conferences: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil || resp.JSON200.Result == nil {
-				return fmt.Errorf("unexpected empty response")
+
+			if nextToken != "" {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", nextToken)
 			}
 
-			if resp.JSON200.NextPageToken != nil && *resp.JSON200.NextPageToken != "" {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", *resp.JSON200.NextPageToken)
-			}
-
-			return output.PrintList(cmd, *resp.JSON200.Result, conferenceListColumns)
+			return output.PrintList(cmd, items, conferenceListColumns)
 		},
 	}
 	cmd.Flags().String("page-token", "", "Pagination token")
@@ -104,23 +98,17 @@ func newConferencesGetCmd() *cobra.Command {
 		Short: "Get a conference by ID",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.GetConferencesIdWithResponse(context.Background(), args[0])
+			result, err := c.Get(context.Background(), "/conferences/"+args[0])
 			if err != nil {
 				return fmt.Errorf("could not get conference: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, conferenceDetailColumns)
+			return output.PrintItem(cmd, result, conferenceDetailColumns)
 		},
 	}
 }
@@ -130,7 +118,7 @@ func newConferencesCreateCmd() *cobra.Command {
 		Use:   "create",
 		Short: "Create a new conference",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -142,28 +130,22 @@ func newConferencesCreateCmd() *cobra.Command {
 			timeout, _ := cmd.Flags().GetInt("timeout")
 			confType, _ := cmd.Flags().GetString("type")
 
-			body := voipbin_client.PostConferencesJSONRequestBody{
-				Name:       name,
-				Detail:     detail,
-				PreFlowId:  preFlowID,
-				PostFlowId: postFlowID,
-				Timeout:    timeout,
-				Type:       voipbin_client.ConferenceManagerConferenceType(confType),
-				Data:       map[string]any{},
+			body := map[string]interface{}{
+				"name":         name,
+				"detail":       detail,
+				"pre_flow_id":  preFlowID,
+				"post_flow_id": postFlowID,
+				"timeout":      timeout,
+				"type":         confType,
+				"data":         map[string]interface{}{},
 			}
 
-			resp, err := client.PostConferencesWithResponse(context.Background(), body)
+			result, err := c.Post(context.Background(), "/conferences", body)
 			if err != nil {
 				return fmt.Errorf("could not create conference: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, conferenceDetailColumns)
+			return output.PrintItem(cmd, result, conferenceDetailColumns)
 		},
 	}
 	cmd.Flags().String("name", "", "Conference name")
@@ -182,7 +164,7 @@ func newConferencesUpdateCmd() *cobra.Command {
 		Short: "Update a conference",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -193,27 +175,21 @@ func newConferencesUpdateCmd() *cobra.Command {
 			postFlowID, _ := cmd.Flags().GetString("post-flow-id")
 			timeout, _ := cmd.Flags().GetInt("timeout")
 
-			body := voipbin_client.PutConferencesIdJSONRequestBody{
-				Name:       name,
-				Detail:     detail,
-				PreFlowId:  preFlowID,
-				PostFlowId: postFlowID,
-				Timeout:    timeout,
-				Data:       map[string]any{},
+			body := map[string]interface{}{
+				"name":         name,
+				"detail":       detail,
+				"pre_flow_id":  preFlowID,
+				"post_flow_id": postFlowID,
+				"timeout":      timeout,
+				"data":         map[string]interface{}{},
 			}
 
-			resp, err := client.PutConferencesIdWithResponse(context.Background(), args[0], body)
+			result, err := c.Put(context.Background(), "/conferences/"+args[0], body)
 			if err != nil {
 				return fmt.Errorf("could not update conference: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, conferenceDetailColumns)
+			return output.PrintItem(cmd, result, conferenceDetailColumns)
 		},
 	}
 	cmd.Flags().String("name", "", "Conference name")
@@ -230,17 +206,14 @@ func newConferencesDeleteCmd() *cobra.Command {
 		Short: "Delete a conference",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.DeleteConferencesIdWithResponse(context.Background(), args[0])
+			_, err = c.Delete(context.Background(), "/conferences/"+args[0])
 			if err != nil {
 				return fmt.Errorf("could not delete conference: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Conference %s deleted.\n", args[0])
@@ -255,7 +228,7 @@ func newConferencesRecordingStartCmd() *cobra.Command {
 		Short: "Start recording a conference",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -264,18 +237,15 @@ func newConferencesRecordingStartCmd() *cobra.Command {
 			format, _ := cmd.Flags().GetString("format")
 			onEndFlowID, _ := cmd.Flags().GetString("on-end-flow-id")
 
-			body := voipbin_client.PostConferencesIdRecordingStartJSONRequestBody{
-				Duration:    duration,
-				Format:      voipbin_client.PostConferencesIdRecordingStartJSONBodyFormat(format),
-				OnEndFlowId: onEndFlowID,
+			body := map[string]interface{}{
+				"duration":       duration,
+				"format":         format,
+				"on_end_flow_id": onEndFlowID,
 			}
 
-			resp, err := client.PostConferencesIdRecordingStartWithResponse(context.Background(), args[0], body)
+			_, err = c.Post(context.Background(), "/conferences/"+args[0]+"/recording_start", body)
 			if err != nil {
 				return fmt.Errorf("could not start recording: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Conference %s recording started.\n", args[0])
@@ -294,17 +264,14 @@ func newConferencesRecordingStopCmd() *cobra.Command {
 		Short: "Stop recording a conference",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.PostConferencesIdRecordingStopWithResponse(context.Background(), args[0])
+			_, err = c.Post(context.Background(), "/conferences/"+args[0]+"/recording_stop", nil)
 			if err != nil {
 				return fmt.Errorf("could not stop recording: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Conference %s recording stopped.\n", args[0])
@@ -319,23 +286,20 @@ func newConferencesTranscribeStartCmd() *cobra.Command {
 		Short: "Start transcribing a conference",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
 			language, _ := cmd.Flags().GetString("language")
 
-			body := voipbin_client.PostConferencesIdTranscribeStartJSONRequestBody{
-				Language: language,
+			body := map[string]interface{}{
+				"language": language,
 			}
 
-			resp, err := client.PostConferencesIdTranscribeStartWithResponse(context.Background(), args[0], body)
+			_, err = c.Post(context.Background(), "/conferences/"+args[0]+"/transcribe_start", body)
 			if err != nil {
 				return fmt.Errorf("could not start transcription: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Conference %s transcription started.\n", args[0])
@@ -352,17 +316,14 @@ func newConferencesTranscribeStopCmd() *cobra.Command {
 		Short: "Stop transcribing a conference",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.PostConferencesIdTranscribeStopWithResponse(context.Background(), args[0])
+			_, err = c.Post(context.Background(), "/conferences/"+args[0]+"/transcribe_stop", nil)
 			if err != nil {
 				return fmt.Errorf("could not stop transcription: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Conference %s transcription stopped.\n", args[0])

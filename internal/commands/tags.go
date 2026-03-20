@@ -3,11 +3,12 @@ package commands
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	"github.com/voipbin/vn-cli/internal/auth"
 	"github.com/voipbin/vn-cli/internal/output"
-	"github.com/voipbin/voipbin-go/gens/voipbin_client"
 )
 
 func newTagsCmd() *cobra.Command {
@@ -45,7 +46,7 @@ func newTagsListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List tags",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -53,31 +54,24 @@ func newTagsListCmd() *cobra.Command {
 			pageToken, _ := cmd.Flags().GetString("page-token")
 			pageSize, _ := cmd.Flags().GetInt("page-size")
 
-			params := &voipbin_client.GetTagsParams{}
+			params := url.Values{}
 			if pageToken != "" {
-				params.PageToken = &pageToken
+				params.Set("page_token", pageToken)
 			}
 			if pageSize > 0 {
-				ps := pageSize
-				params.PageSize = &ps
+				params.Set("page_size", strconv.Itoa(pageSize))
 			}
 
-			resp, err := client.GetTagsWithResponse(context.Background(), params)
+			items, nextToken, err := c.List(context.Background(), "/tags", params)
 			if err != nil {
 				return fmt.Errorf("could not list tags: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil || resp.JSON200.Result == nil {
-				return fmt.Errorf("unexpected empty response")
+
+			if nextToken != "" {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", nextToken)
 			}
 
-			if resp.JSON200.NextPageToken != nil && *resp.JSON200.NextPageToken != "" {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", *resp.JSON200.NextPageToken)
-			}
-
-			return output.PrintList(cmd, *resp.JSON200.Result, tagListColumns)
+			return output.PrintList(cmd, items, tagListColumns)
 		},
 	}
 	cmd.Flags().String("page-token", "", "Pagination token")
@@ -91,23 +85,17 @@ func newTagsGetCmd() *cobra.Command {
 		Short: "Get a tag by ID",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.GetTagsIdWithResponse(context.Background(), args[0])
+			result, err := c.Get(context.Background(), "/tags/"+args[0])
 			if err != nil {
 				return fmt.Errorf("could not get tag: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, tagDetailColumns)
+			return output.PrintItem(cmd, result, tagDetailColumns)
 		},
 	}
 }
@@ -117,7 +105,7 @@ func newTagsCreateCmd() *cobra.Command {
 		Use:   "create",
 		Short: "Create a new tag",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -125,23 +113,17 @@ func newTagsCreateCmd() *cobra.Command {
 			name, _ := cmd.Flags().GetString("name")
 			detail, _ := cmd.Flags().GetString("detail")
 
-			body := voipbin_client.PostTagsJSONRequestBody{
-				Name:   name,
-				Detail: detail,
+			body := map[string]interface{}{
+				"name":   name,
+				"detail": detail,
 			}
 
-			resp, err := client.PostTagsWithResponse(context.Background(), body)
+			result, err := c.Post(context.Background(), "/tags", body)
 			if err != nil {
 				return fmt.Errorf("could not create tag: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, tagDetailColumns)
+			return output.PrintItem(cmd, result, tagDetailColumns)
 		},
 	}
 	cmd.Flags().String("name", "", "Tag name")
@@ -156,7 +138,7 @@ func newTagsUpdateCmd() *cobra.Command {
 		Short: "Update a tag",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -164,23 +146,17 @@ func newTagsUpdateCmd() *cobra.Command {
 			name, _ := cmd.Flags().GetString("name")
 			detail, _ := cmd.Flags().GetString("detail")
 
-			body := voipbin_client.PutTagsIdJSONRequestBody{
-				Name:   name,
-				Detail: detail,
+			body := map[string]interface{}{
+				"name":   name,
+				"detail": detail,
 			}
 
-			resp, err := client.PutTagsIdWithResponse(context.Background(), args[0], body)
+			result, err := c.Put(context.Background(), "/tags/"+args[0], body)
 			if err != nil {
 				return fmt.Errorf("could not update tag: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, tagDetailColumns)
+			return output.PrintItem(cmd, result, tagDetailColumns)
 		},
 	}
 	cmd.Flags().String("name", "", "Tag name")
@@ -194,17 +170,14 @@ func newTagsDeleteCmd() *cobra.Command {
 		Short: "Delete a tag",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.DeleteTagsIdWithResponse(context.Background(), args[0])
+			_, err = c.Delete(context.Background(), "/tags/"+args[0])
 			if err != nil {
 				return fmt.Errorf("could not delete tag: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Tag %s deleted.\n", args[0])

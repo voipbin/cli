@@ -3,11 +3,12 @@ package commands
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	"github.com/voipbin/vn-cli/internal/auth"
 	"github.com/voipbin/vn-cli/internal/output"
-	"github.com/voipbin/voipbin-go/gens/voipbin_client"
 )
 
 func newRecordingsCmd() *cobra.Command {
@@ -51,7 +52,7 @@ func newRecordingsListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List recordings",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -59,31 +60,24 @@ func newRecordingsListCmd() *cobra.Command {
 			pageToken, _ := cmd.Flags().GetString("page-token")
 			pageSize, _ := cmd.Flags().GetInt("page-size")
 
-			params := &voipbin_client.GetRecordingsParams{}
+			params := url.Values{}
 			if pageToken != "" {
-				params.PageToken = &pageToken
+				params.Set("page_token", pageToken)
 			}
 			if pageSize > 0 {
-				ps := pageSize
-				params.PageSize = &ps
+				params.Set("page_size", strconv.Itoa(pageSize))
 			}
 
-			resp, err := client.GetRecordingsWithResponse(context.Background(), params)
+			items, nextToken, err := c.List(context.Background(), "/recordings", params)
 			if err != nil {
 				return fmt.Errorf("could not list recordings: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil || resp.JSON200.Result == nil {
-				return fmt.Errorf("unexpected empty response")
+
+			if nextToken != "" {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", nextToken)
 			}
 
-			if resp.JSON200.NextPageToken != nil && *resp.JSON200.NextPageToken != "" {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", *resp.JSON200.NextPageToken)
-			}
-
-			return output.PrintList(cmd, *resp.JSON200.Result, recordingListColumns)
+			return output.PrintList(cmd, items, recordingListColumns)
 		},
 	}
 	cmd.Flags().String("page-token", "", "Pagination token")
@@ -97,23 +91,17 @@ func newRecordingsGetCmd() *cobra.Command {
 		Short: "Get a recording by ID",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.GetRecordingsIdWithResponse(context.Background(), args[0])
+			result, err := c.Get(context.Background(), "/recordings/"+args[0])
 			if err != nil {
 				return fmt.Errorf("could not get recording: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, recordingDetailColumns)
+			return output.PrintItem(cmd, result, recordingDetailColumns)
 		},
 	}
 }
@@ -124,17 +112,13 @@ func newRecordingsDeleteCmd() *cobra.Command {
 		Short: "Delete a recording",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.DeleteRecordingsIdWithResponse(context.Background(), args[0])
-			if err != nil {
+			if _, err := c.Delete(context.Background(), "/recordings/"+args[0]); err != nil {
 				return fmt.Errorf("could not delete recording: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Recording %s deleted.\n", args[0])

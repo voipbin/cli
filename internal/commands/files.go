@@ -3,11 +3,12 @@ package commands
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	"github.com/voipbin/vn-cli/internal/auth"
 	"github.com/voipbin/vn-cli/internal/output"
-	"github.com/voipbin/voipbin-go/gens/voipbin_client"
 )
 
 func newFilesCmd() *cobra.Command {
@@ -48,7 +49,7 @@ func newFilesListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List files",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -56,31 +57,24 @@ func newFilesListCmd() *cobra.Command {
 			pageToken, _ := cmd.Flags().GetString("page-token")
 			pageSize, _ := cmd.Flags().GetInt("page-size")
 
-			params := &voipbin_client.GetFilesParams{}
+			params := url.Values{}
 			if pageToken != "" {
-				params.PageToken = &pageToken
+				params.Set("page_token", pageToken)
 			}
 			if pageSize > 0 {
-				ps := pageSize
-				params.PageSize = &ps
+				params.Set("page_size", strconv.Itoa(pageSize))
 			}
 
-			resp, err := client.GetFilesWithResponse(context.Background(), params)
+			items, nextToken, err := c.List(context.Background(), "/files", params)
 			if err != nil {
 				return fmt.Errorf("could not list files: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil || resp.JSON200.Result == nil {
-				return fmt.Errorf("unexpected empty response")
+
+			if nextToken != "" {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", nextToken)
 			}
 
-			if resp.JSON200.NextPageToken != nil && *resp.JSON200.NextPageToken != "" {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", *resp.JSON200.NextPageToken)
-			}
-
-			return output.PrintList(cmd, *resp.JSON200.Result, fileListColumns)
+			return output.PrintList(cmd, items, fileListColumns)
 		},
 	}
 	cmd.Flags().String("page-token", "", "Pagination token")
@@ -94,23 +88,17 @@ func newFilesGetCmd() *cobra.Command {
 		Short: "Get a file by ID",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.GetFilesIdWithResponse(context.Background(), args[0])
+			result, err := c.Get(context.Background(), "/files/"+args[0])
 			if err != nil {
 				return fmt.Errorf("could not get file: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, fileDetailColumns)
+			return output.PrintItem(cmd, result, fileDetailColumns)
 		},
 	}
 }
@@ -121,17 +109,13 @@ func newFilesDeleteCmd() *cobra.Command {
 		Short: "Delete a file",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.DeleteFilesIdWithResponse(context.Background(), args[0])
-			if err != nil {
+			if _, err := c.Delete(context.Background(), "/files/"+args[0]); err != nil {
 				return fmt.Errorf("could not delete file: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "File %s deleted.\n", args[0])

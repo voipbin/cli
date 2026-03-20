@@ -3,11 +3,12 @@ package commands
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	"github.com/voipbin/vn-cli/internal/auth"
 	"github.com/voipbin/vn-cli/internal/output"
-	"github.com/voipbin/voipbin-go/gens/voipbin_client"
 )
 
 func newAgentsCmd() *cobra.Command {
@@ -56,7 +57,7 @@ func newAgentsListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List agents",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -64,31 +65,24 @@ func newAgentsListCmd() *cobra.Command {
 			pageToken, _ := cmd.Flags().GetString("page-token")
 			pageSize, _ := cmd.Flags().GetInt("page-size")
 
-			params := &voipbin_client.GetAgentsParams{}
+			params := url.Values{}
 			if pageToken != "" {
-				params.PageToken = &pageToken
+				params.Set("page_token", pageToken)
 			}
 			if pageSize > 0 {
-				ps := pageSize
-				params.PageSize = &ps
+				params.Set("page_size", strconv.Itoa(pageSize))
 			}
 
-			resp, err := client.GetAgentsWithResponse(context.Background(), params)
+			items, nextToken, err := c.List(context.Background(), "/agents", params)
 			if err != nil {
 				return fmt.Errorf("could not list agents: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil || resp.JSON200.Result == nil {
-				return fmt.Errorf("unexpected empty response")
+
+			if nextToken != "" {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", nextToken)
 			}
 
-			if resp.JSON200.NextPageToken != nil && *resp.JSON200.NextPageToken != "" {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", *resp.JSON200.NextPageToken)
-			}
-
-			return output.PrintList(cmd, *resp.JSON200.Result, agentListColumns)
+			return output.PrintList(cmd, items, agentListColumns)
 		},
 	}
 	cmd.Flags().String("page-token", "", "Pagination token")
@@ -102,23 +96,17 @@ func newAgentsGetCmd() *cobra.Command {
 		Short: "Get an agent by ID",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.GetAgentsIdWithResponse(context.Background(), args[0])
+			result, err := c.Get(context.Background(), "/agents/"+args[0])
 			if err != nil {
 				return fmt.Errorf("could not get agent: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, agentDetailColumns)
+			return output.PrintItem(cmd, result, agentDetailColumns)
 		},
 	}
 }
@@ -128,7 +116,7 @@ func newAgentsCreateCmd() *cobra.Command {
 		Use:   "create",
 		Short: "Create a new agent",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -140,29 +128,23 @@ func newAgentsCreateCmd() *cobra.Command {
 			ringMethod, _ := cmd.Flags().GetString("ring-method")
 			permission, _ := cmd.Flags().GetInt("permission")
 
-			body := voipbin_client.PostAgentsJSONRequestBody{
-				Name:       name,
-				Username:   username,
-				Password:   password,
-				Detail:     detail,
-				RingMethod: voipbin_client.AgentManagerAgentRingMethod(ringMethod),
-				Permission: voipbin_client.AgentManagerAgentPermission(permission),
-				Addresses:  []voipbin_client.CommonAddress{},
-				TagIds:     []string{},
+			body := map[string]interface{}{
+				"name":        name,
+				"username":    username,
+				"password":    password,
+				"detail":      detail,
+				"ring_method": ringMethod,
+				"permission":  permission,
+				"addresses":   []interface{}{},
+				"tag_ids":     []interface{}{},
 			}
 
-			resp, err := client.PostAgentsWithResponse(context.Background(), body)
+			result, err := c.Post(context.Background(), "/agents", body)
 			if err != nil {
 				return fmt.Errorf("could not create agent: %w", err)
 			}
-			if resp.StatusCode() != 201 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON201 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON201, agentDetailColumns)
+			return output.PrintItem(cmd, result, agentDetailColumns)
 		},
 	}
 	cmd.Flags().String("name", "", "Agent name")
@@ -183,7 +165,7 @@ func newAgentsUpdateCmd() *cobra.Command {
 		Short: "Update an agent",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -192,30 +174,24 @@ func newAgentsUpdateCmd() *cobra.Command {
 			detail, _ := cmd.Flags().GetString("detail")
 			ringMethod, _ := cmd.Flags().GetString("ring-method")
 
-			body := voipbin_client.PutAgentsIdJSONRequestBody{}
+			// Pattern 2 (conditional): only add to map if value is non-empty.
+			body := map[string]interface{}{}
 			if name != "" {
-				body.Name = &name
+				body["name"] = name
 			}
 			if detail != "" {
-				body.Detail = &detail
+				body["detail"] = detail
 			}
 			if ringMethod != "" {
-				rm := voipbin_client.AgentManagerAgentRingMethod(ringMethod)
-				body.RingMethod = &rm
+				body["ring_method"] = ringMethod
 			}
 
-			resp, err := client.PutAgentsIdWithResponse(context.Background(), args[0], body)
+			result, err := c.Put(context.Background(), "/agents/"+args[0], body)
 			if err != nil {
 				return fmt.Errorf("could not update agent: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, agentDetailColumns)
+			return output.PrintItem(cmd, result, agentDetailColumns)
 		},
 	}
 	cmd.Flags().String("name", "", "Agent name")
@@ -230,17 +206,13 @@ func newAgentsDeleteCmd() *cobra.Command {
 		Short: "Delete an agent",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.DeleteAgentsIdWithResponse(context.Background(), args[0])
-			if err != nil {
+			if _, err := c.Delete(context.Background(), "/agents/"+args[0]); err != nil {
 				return fmt.Errorf("could not delete agent: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Agent %s deleted.\n", args[0])
@@ -255,27 +227,21 @@ func newAgentsUpdateAddressesCmd() *cobra.Command {
 		Short: "Update agent addresses",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			body := voipbin_client.PutAgentsIdAddressesJSONRequestBody{
-				Addresses: &[]voipbin_client.CommonAddress{},
+			body := map[string]interface{}{
+				"addresses": []interface{}{},
 			}
 
-			resp, err := client.PutAgentsIdAddressesWithResponse(context.Background(), args[0], body)
+			result, err := c.Put(context.Background(), "/agents/"+args[0]+"/addresses", body)
 			if err != nil {
 				return fmt.Errorf("could not update addresses: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, agentDetailColumns)
+			return output.PrintItem(cmd, result, agentDetailColumns)
 		},
 	}
 	return cmd
@@ -287,28 +253,22 @@ func newAgentsUpdatePasswordCmd() *cobra.Command {
 		Short: "Update agent password",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
 			password, _ := cmd.Flags().GetString("password")
-			body := voipbin_client.PutAgentsIdPasswordJSONRequestBody{
-				Password: &password,
+			body := map[string]interface{}{
+				"password": password,
 			}
 
-			resp, err := client.PutAgentsIdPasswordWithResponse(context.Background(), args[0], body)
+			result, err := c.Put(context.Background(), "/agents/"+args[0]+"/password", body)
 			if err != nil {
 				return fmt.Errorf("could not update password: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, agentDetailColumns)
+			return output.PrintItem(cmd, result, agentDetailColumns)
 		},
 	}
 	cmd.Flags().String("password", "", "New password")
@@ -322,29 +282,22 @@ func newAgentsUpdatePermissionCmd() *cobra.Command {
 		Short: "Update agent permission",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
 			permission, _ := cmd.Flags().GetInt("permission")
-			perm := voipbin_client.AgentManagerAgentPermission(permission)
-			body := voipbin_client.PutAgentsIdPermissionJSONRequestBody{
-				Permission: &perm,
+			body := map[string]interface{}{
+				"permission": permission,
 			}
 
-			resp, err := client.PutAgentsIdPermissionWithResponse(context.Background(), args[0], body)
+			result, err := c.Put(context.Background(), "/agents/"+args[0]+"/permission", body)
 			if err != nil {
 				return fmt.Errorf("could not update permission: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, agentDetailColumns)
+			return output.PrintItem(cmd, result, agentDetailColumns)
 		},
 	}
 	cmd.Flags().Int("permission", 0, "Permission level")
@@ -358,29 +311,22 @@ func newAgentsUpdateStatusCmd() *cobra.Command {
 		Short: "Update agent status",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
 			status, _ := cmd.Flags().GetString("status")
-			s := voipbin_client.AgentManagerAgentStatus(status)
-			body := voipbin_client.PutAgentsIdStatusJSONRequestBody{
-				Status: &s,
+			body := map[string]interface{}{
+				"status": status,
 			}
 
-			resp, err := client.PutAgentsIdStatusWithResponse(context.Background(), args[0], body)
+			result, err := c.Put(context.Background(), "/agents/"+args[0]+"/status", body)
 			if err != nil {
 				return fmt.Errorf("could not update status: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, agentDetailColumns)
+			return output.PrintItem(cmd, result, agentDetailColumns)
 		},
 	}
 	cmd.Flags().String("status", "", "Agent status")
@@ -394,28 +340,22 @@ func newAgentsUpdateTagIdsCmd() *cobra.Command {
 		Short: "Update agent tag IDs",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
 			tagIDs, _ := cmd.Flags().GetStringArray("tag-id")
-			body := voipbin_client.PutAgentsIdTagIdsJSONRequestBody{
-				TagIds: &tagIDs,
+			body := map[string]interface{}{
+				"tag_ids": tagIDs,
 			}
 
-			resp, err := client.PutAgentsIdTagIdsWithResponse(context.Background(), args[0], body)
+			result, err := c.Put(context.Background(), "/agents/"+args[0]+"/tag_ids", body)
 			if err != nil {
 				return fmt.Errorf("could not update tag IDs: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, agentDetailColumns)
+			return output.PrintItem(cmd, result, agentDetailColumns)
 		},
 	}
 	cmd.Flags().StringArray("tag-id", []string{}, "Tag ID (repeatable)")

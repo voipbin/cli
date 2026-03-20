@@ -7,7 +7,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/voipbin/vn-cli/internal/auth"
 	"github.com/voipbin/vn-cli/internal/output"
-	"github.com/voipbin/voipbin-go/gens/voipbin_client"
 )
 
 func newTransfersCmd() *cobra.Command {
@@ -36,7 +35,7 @@ func newTransfersCreateCmd() *cobra.Command {
 		Use:   "create",
 		Short: "Create a transfer",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -45,24 +44,18 @@ func newTransfersCreateCmd() *cobra.Command {
 			transfereeAddr, _ := cmd.Flags().GetString("transferee-address")
 			transferType, _ := cmd.Flags().GetString("type")
 
-			body := voipbin_client.PostTransfersJSONRequestBody{
-				TransfererCallId:    transfererCallID,
-				TransfereeAddresses: []voipbin_client.CommonAddress{{Target: &transfereeAddr}},
-				TransferType:        voipbin_client.TransferManagerTransferType(transferType),
+			body := map[string]interface{}{
+				"transferer_call_id":    transfererCallID,
+				"transferee_addresses":  []map[string]interface{}{{"target": transfereeAddr}},
+				"transfer_type":         transferType,
 			}
 
-			resp, err := client.PostTransfersWithResponse(context.Background(), body)
+			result, err := c.Post(context.Background(), "/transfers", body)
 			if err != nil {
 				return fmt.Errorf("could not create transfer: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, transferDetailColumns)
+			return output.PrintItem(cmd, result, transferDetailColumns)
 		},
 	}
 	cmd.Flags().String("transferer-call-id", "", "Call ID of the transferer")

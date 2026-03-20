@@ -3,11 +3,12 @@ package commands
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	"github.com/voipbin/vn-cli/internal/auth"
 	"github.com/voipbin/vn-cli/internal/output"
-	"github.com/voipbin/voipbin-go/gens/voipbin_client"
 )
 
 func newOutplansCmd() *cobra.Command {
@@ -52,34 +53,27 @@ func newOutplansListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List outplans",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 			pageToken, _ := cmd.Flags().GetString("page-token")
 			pageSize, _ := cmd.Flags().GetInt("page-size")
-			params := &voipbin_client.GetOutplansParams{}
+			params := url.Values{}
 			if pageToken != "" {
-				params.PageToken = &pageToken
+				params.Set("page_token", pageToken)
 			}
 			if pageSize > 0 {
-				ps := pageSize
-				params.PageSize = &ps
+				params.Set("page_size", strconv.Itoa(pageSize))
 			}
-			resp, err := client.GetOutplansWithResponse(context.Background(), params)
+			items, nextToken, err := c.List(context.Background(), "/outplans", params)
 			if err != nil {
 				return fmt.Errorf("could not list outplans: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
+			if nextToken != "" {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", nextToken)
 			}
-			if resp.JSON200 == nil || resp.JSON200.Result == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
-			if resp.JSON200.NextPageToken != nil && *resp.JSON200.NextPageToken != "" {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", *resp.JSON200.NextPageToken)
-			}
-			return output.PrintList(cmd, *resp.JSON200.Result, outplanListColumns)
+			return output.PrintList(cmd, items, outplanListColumns)
 		},
 	}
 	cmd.Flags().String("page-token", "", "Pagination token")
@@ -93,21 +87,15 @@ func newOutplansGetCmd() *cobra.Command {
 		Short: "Get an outplan by ID",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetOutplansIdWithResponse(context.Background(), args[0])
+			result, err := c.Get(context.Background(), "/outplans/"+args[0])
 			if err != nil {
 				return fmt.Errorf("could not get outplan: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
-			return output.PrintItem(cmd, resp.JSON200, outplanDetailColumns)
+			return output.PrintItem(cmd, result, outplanDetailColumns)
 		},
 	}
 }
@@ -117,7 +105,7 @@ func newOutplansCreateCmd() *cobra.Command {
 		Use:   "create",
 		Short: "Create a new outplan",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -126,24 +114,18 @@ func newOutplansCreateCmd() *cobra.Command {
 			dialTimeout, _ := cmd.Flags().GetInt("dial-timeout")
 			tryInterval, _ := cmd.Flags().GetInt("try-interval")
 			sourceTarget, _ := cmd.Flags().GetString("source")
-			body := voipbin_client.PostOutplansJSONRequestBody{
-				Name:        name,
-				Detail:      detail,
-				DialTimeout: dialTimeout,
-				TryInterval: tryInterval,
-				Source:      voipbin_client.CommonAddress{Target: &sourceTarget},
+			body := map[string]interface{}{
+				"name":         name,
+				"detail":       detail,
+				"dial_timeout": dialTimeout,
+				"try_interval": tryInterval,
+				"source":       map[string]interface{}{"target": sourceTarget},
 			}
-			resp, err := client.PostOutplansWithResponse(context.Background(), body)
+			result, err := c.Post(context.Background(), "/outplans", body)
 			if err != nil {
 				return fmt.Errorf("could not create outplan: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
-			return output.PrintItem(cmd, resp.JSON200, outplanDetailColumns)
+			return output.PrintItem(cmd, result, outplanDetailColumns)
 		},
 	}
 	cmd.Flags().String("name", "", "Outplan name")
@@ -161,27 +143,21 @@ func newOutplansUpdateCmd() *cobra.Command {
 		Short: "Update an outplan",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 			name, _ := cmd.Flags().GetString("name")
 			detail, _ := cmd.Flags().GetString("detail")
-			body := voipbin_client.PutOutplansIdJSONRequestBody{
-				Name:   name,
-				Detail: detail,
+			body := map[string]interface{}{
+				"name":   name,
+				"detail": detail,
 			}
-			resp, err := client.PutOutplansIdWithResponse(context.Background(), args[0], body)
+			result, err := c.Put(context.Background(), "/outplans/"+args[0], body)
 			if err != nil {
 				return fmt.Errorf("could not update outplan: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
-			return output.PrintItem(cmd, resp.JSON200, outplanDetailColumns)
+			return output.PrintItem(cmd, result, outplanDetailColumns)
 		},
 	}
 	cmd.Flags().String("name", "", "New name")
@@ -195,16 +171,13 @@ func newOutplansDeleteCmd() *cobra.Command {
 		Short: "Delete an outplan",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
-			resp, err := client.DeleteOutplansIdWithResponse(context.Background(), args[0])
+			_, err = c.Delete(context.Background(), "/outplans/"+args[0])
 			if err != nil {
 				return fmt.Errorf("could not delete outplan: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Outplan %s deleted.\n", args[0])
 			return nil
@@ -218,7 +191,7 @@ func newOutplansSetDialInfoCmd() *cobra.Command {
 		Short: "Update dial info for an outplan",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -230,27 +203,21 @@ func newOutplansSetDialInfoCmd() *cobra.Command {
 			maxTry2, _ := cmd.Flags().GetInt("max-try-2")
 			maxTry3, _ := cmd.Flags().GetInt("max-try-3")
 			maxTry4, _ := cmd.Flags().GetInt("max-try-4")
-			body := voipbin_client.PutOutplansIdDialInfoJSONRequestBody{
-				DialTimeout:  dialTimeout,
-				TryInterval:  tryInterval,
-				Source:       voipbin_client.CommonAddress{Target: &sourceTarget},
-				MaxTryCount0: maxTry0,
-				MaxTryCount1: maxTry1,
-				MaxTryCount2: maxTry2,
-				MaxTryCount3: maxTry3,
-				MaxTryCount4: maxTry4,
+			body := map[string]interface{}{
+				"dial_timeout":   dialTimeout,
+				"try_interval":   tryInterval,
+				"source":         map[string]interface{}{"target": sourceTarget},
+				"max_try_count0": maxTry0,
+				"max_try_count1": maxTry1,
+				"max_try_count2": maxTry2,
+				"max_try_count3": maxTry3,
+				"max_try_count4": maxTry4,
 			}
-			resp, err := client.PutOutplansIdDialInfoWithResponse(context.Background(), args[0], body)
+			result, err := c.Put(context.Background(), "/outplans/"+args[0]+"/dial_info", body)
 			if err != nil {
 				return fmt.Errorf("could not set dial info: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
-			return output.PrintItem(cmd, resp.JSON200, outplanDetailColumns)
+			return output.PrintItem(cmd, result, outplanDetailColumns)
 		},
 	}
 	cmd.Flags().Int("dial-timeout", 30, "Dial timeout in seconds")

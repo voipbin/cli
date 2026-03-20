@@ -3,11 +3,12 @@ package commands
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	"github.com/voipbin/vn-cli/internal/auth"
 	"github.com/voipbin/vn-cli/internal/output"
-	"github.com/voipbin/voipbin-go/gens/voipbin_client"
 )
 
 func newCustomersCmd() *cobra.Command {
@@ -53,7 +54,7 @@ func newCustomersListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List customers",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -61,31 +62,24 @@ func newCustomersListCmd() *cobra.Command {
 			pageToken, _ := cmd.Flags().GetString("page-token")
 			pageSize, _ := cmd.Flags().GetInt("page-size")
 
-			params := &voipbin_client.GetCustomersParams{}
+			params := url.Values{}
 			if pageToken != "" {
-				params.PageToken = &pageToken
+				params.Set("page_token", pageToken)
 			}
 			if pageSize > 0 {
-				ps := pageSize
-				params.PageSize = &ps
+				params.Set("page_size", strconv.Itoa(pageSize))
 			}
 
-			resp, err := client.GetCustomersWithResponse(context.Background(), params)
+			items, nextToken, err := c.List(context.Background(), "/customers", params)
 			if err != nil {
 				return fmt.Errorf("could not list customers: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil || resp.JSON200.Result == nil {
-				return fmt.Errorf("unexpected empty response")
+
+			if nextToken != "" {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", nextToken)
 			}
 
-			if resp.JSON200.NextPageToken != nil && *resp.JSON200.NextPageToken != "" {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", *resp.JSON200.NextPageToken)
-			}
-
-			return output.PrintList(cmd, *resp.JSON200.Result, customerListColumns)
+			return output.PrintList(cmd, items, customerListColumns)
 		},
 	}
 	cmd.Flags().String("page-token", "", "Pagination token")
@@ -99,23 +93,17 @@ func newCustomersGetCmd() *cobra.Command {
 		Short: "Get a customer by ID",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.GetCustomersIdWithResponse(context.Background(), args[0])
+			result, err := c.Get(context.Background(), "/customers/"+args[0])
 			if err != nil {
 				return fmt.Errorf("could not get customer: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, customerDetailColumns)
+			return output.PrintItem(cmd, result, customerDetailColumns)
 		},
 	}
 }
@@ -125,7 +113,7 @@ func newCustomersCreateCmd() *cobra.Command {
 		Use:   "create",
 		Short: "Create a new customer",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -138,28 +126,22 @@ func newCustomersCreateCmd() *cobra.Command {
 			webhookURI, _ := cmd.Flags().GetString("webhook-uri")
 			webhookMethod, _ := cmd.Flags().GetString("webhook-method")
 
-			body := voipbin_client.PostCustomersJSONRequestBody{
-				Name:          name,
-				Email:         email,
-				PhoneNumber:   phone,
-				Address:       address,
-				Detail:        detail,
-				WebhookUri:    webhookURI,
-				WebhookMethod: voipbin_client.CustomerManagerCustomerWebhookMethod(webhookMethod),
+			body := map[string]interface{}{
+				"name":           name,
+				"email":          email,
+				"phone_number":   phone,
+				"address":        address,
+				"detail":         detail,
+				"webhook_uri":    webhookURI,
+				"webhook_method": webhookMethod,
 			}
 
-			resp, err := client.PostCustomersWithResponse(context.Background(), body)
+			result, err := c.Post(context.Background(), "/customers", body)
 			if err != nil {
 				return fmt.Errorf("could not create customer: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, customerDetailColumns)
+			return output.PrintItem(cmd, result, customerDetailColumns)
 		},
 	}
 	cmd.Flags().String("name", "", "Customer name")
@@ -179,7 +161,7 @@ func newCustomersUpdateCmd() *cobra.Command {
 		Short: "Update a customer",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -192,28 +174,22 @@ func newCustomersUpdateCmd() *cobra.Command {
 			webhookURI, _ := cmd.Flags().GetString("webhook-uri")
 			webhookMethod, _ := cmd.Flags().GetString("webhook-method")
 
-			body := voipbin_client.PutCustomersIdJSONRequestBody{
-				Name:          name,
-				Email:         email,
-				PhoneNumber:   phone,
-				Address:       address,
-				Detail:        detail,
-				WebhookUri:    webhookURI,
-				WebhookMethod: voipbin_client.CustomerManagerCustomerWebhookMethod(webhookMethod),
+			body := map[string]interface{}{
+				"name":           name,
+				"email":          email,
+				"phone_number":   phone,
+				"address":        address,
+				"detail":         detail,
+				"webhook_uri":    webhookURI,
+				"webhook_method": webhookMethod,
 			}
 
-			resp, err := client.PutCustomersIdWithResponse(context.Background(), args[0], body)
+			result, err := c.Put(context.Background(), "/customers/"+args[0], body)
 			if err != nil {
 				return fmt.Errorf("could not update customer: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, customerDetailColumns)
+			return output.PrintItem(cmd, result, customerDetailColumns)
 		},
 	}
 	cmd.Flags().String("name", "", "Customer name")
@@ -232,17 +208,13 @@ func newCustomersDeleteCmd() *cobra.Command {
 		Short: "Delete a customer",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.DeleteCustomersIdWithResponse(context.Background(), args[0])
-			if err != nil {
+			if _, err := c.Delete(context.Background(), "/customers/"+args[0]); err != nil {
 				return fmt.Errorf("could not delete customer: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Customer %s deleted.\n", args[0])
@@ -257,28 +229,22 @@ func newCustomersUpdateBillingAccountIDCmd() *cobra.Command {
 		Short: "Update customer billing account ID",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
 			billingAccountID, _ := cmd.Flags().GetString("billing-account-id")
-			body := voipbin_client.PutCustomersIdBillingAccountIdJSONRequestBody{
-				BillingAccountId: billingAccountID,
+			body := map[string]interface{}{
+				"billing_account_id": billingAccountID,
 			}
 
-			resp, err := client.PutCustomersIdBillingAccountIdWithResponse(context.Background(), args[0], body)
+			result, err := c.Put(context.Background(), "/customers/"+args[0]+"/billing_account_id", body)
 			if err != nil {
 				return fmt.Errorf("could not update billing account: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, customerDetailColumns)
+			return output.PrintItem(cmd, result, customerDetailColumns)
 		},
 	}
 	cmd.Flags().String("billing-account-id", "", "Billing account ID")

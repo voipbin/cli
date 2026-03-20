@@ -18,20 +18,14 @@ func newMeCmd() *cobra.Command {
 }
 
 func runMe(cmd *cobra.Command, args []string) error {
-	client, err := auth.NewClientFromContext(cmd)
+	c, err := auth.NewClientFromContext(cmd)
 	if err != nil {
 		return err
 	}
 
-	resp, err := client.GetMeWithResponse(context.Background())
+	result, err := c.Get(context.Background(), "/me")
 	if err != nil {
 		return fmt.Errorf("could not get user info: %w", err)
-	}
-	if resp.StatusCode() != 200 {
-		return fmt.Errorf("API error: %s", resp.Status())
-	}
-	if resp.JSON200 == nil {
-		return fmt.Errorf("unexpected empty response")
 	}
 
 	columns := []output.Column{
@@ -43,5 +37,5 @@ func runMe(cmd *cobra.Command, args []string) error {
 		{Name: "CREATED", Field: "tm_create"},
 	}
 
-	return output.PrintItem(cmd, resp.JSON200, columns)
+	return output.PrintItem(cmd, result, columns)
 }

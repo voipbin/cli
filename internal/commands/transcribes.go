@@ -3,11 +3,12 @@ package commands
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	"github.com/voipbin/vn-cli/internal/auth"
 	"github.com/voipbin/vn-cli/internal/output"
-	"github.com/voipbin/voipbin-go/gens/voipbin_client"
 )
 
 func newTranscribesCmd() *cobra.Command {
@@ -50,7 +51,7 @@ func newTranscribesListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List transcriptions",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -58,31 +59,24 @@ func newTranscribesListCmd() *cobra.Command {
 			pageToken, _ := cmd.Flags().GetString("page-token")
 			pageSize, _ := cmd.Flags().GetInt("page-size")
 
-			params := &voipbin_client.GetTranscribesParams{}
+			params := url.Values{}
 			if pageToken != "" {
-				params.PageToken = &pageToken
+				params.Set("page_token", pageToken)
 			}
 			if pageSize > 0 {
-				ps := pageSize
-				params.PageSize = &ps
+				params.Set("page_size", strconv.Itoa(pageSize))
 			}
 
-			resp, err := client.GetTranscribesWithResponse(context.Background(), params)
+			items, nextToken, err := c.List(context.Background(), "/transcribes", params)
 			if err != nil {
 				return fmt.Errorf("could not list transcribes: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil || resp.JSON200.Result == nil {
-				return fmt.Errorf("unexpected empty response")
+
+			if nextToken != "" {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", nextToken)
 			}
 
-			if resp.JSON200.NextPageToken != nil && *resp.JSON200.NextPageToken != "" {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", *resp.JSON200.NextPageToken)
-			}
-
-			return output.PrintList(cmd, *resp.JSON200.Result, transcribeListColumns)
+			return output.PrintList(cmd, items, transcribeListColumns)
 		},
 	}
 	cmd.Flags().String("page-token", "", "Pagination token")
@@ -96,23 +90,17 @@ func newTranscribesGetCmd() *cobra.Command {
 		Short: "Get a transcription by ID",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.GetTranscribesIdWithResponse(context.Background(), args[0])
+			result, err := c.Get(context.Background(), "/transcribes/"+args[0])
 			if err != nil {
 				return fmt.Errorf("could not get transcribe: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, transcribeDetailColumns)
+			return output.PrintItem(cmd, result, transcribeDetailColumns)
 		},
 	}
 }
@@ -122,7 +110,7 @@ func newTranscribesCreateCmd() *cobra.Command {
 		Use:   "create",
 		Short: "Create a new transcription",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -133,26 +121,20 @@ func newTranscribesCreateCmd() *cobra.Command {
 			direction, _ := cmd.Flags().GetString("direction")
 			onEndFlowID, _ := cmd.Flags().GetString("on-end-flow-id")
 
-			body := voipbin_client.PostTranscribesJSONRequestBody{
-				ReferenceId:   referenceID,
-				ReferenceType: voipbin_client.TranscribeManagerTranscribeReferenceType(referenceType),
-				Language:      language,
-				Direction:     voipbin_client.TranscribeManagerTranscribeDirection(direction),
-				OnEndFlowId:   onEndFlowID,
+			body := map[string]interface{}{
+				"reference_id":    referenceID,
+				"reference_type":  referenceType,
+				"language":        language,
+				"direction":       direction,
+				"on_end_flow_id":  onEndFlowID,
 			}
 
-			resp, err := client.PostTranscribesWithResponse(context.Background(), body)
+			result, err := c.Post(context.Background(), "/transcribes", body)
 			if err != nil {
 				return fmt.Errorf("could not create transcribe: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, transcribeDetailColumns)
+			return output.PrintItem(cmd, result, transcribeDetailColumns)
 		},
 	}
 	cmd.Flags().String("reference-id", "", "Reference ID (call/conference/recording ID)")
@@ -171,17 +153,13 @@ func newTranscribesDeleteCmd() *cobra.Command {
 		Short: "Delete a transcription",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.DeleteTranscribesIdWithResponse(context.Background(), args[0])
-			if err != nil {
+			if _, err := c.Delete(context.Background(), "/transcribes/"+args[0]); err != nil {
 				return fmt.Errorf("could not delete transcribe: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Transcription %s deleted.\n", args[0])
@@ -196,17 +174,13 @@ func newTranscribesStopCmd() *cobra.Command {
 		Short: "Stop a transcription",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.PostTranscribesIdStopWithResponse(context.Background(), args[0])
-			if err != nil {
+			if _, err := c.Post(context.Background(), "/transcribes/"+args[0]+"/stop", nil); err != nil {
 				return fmt.Errorf("could not stop transcribe: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Transcription %s stopped.\n", args[0])

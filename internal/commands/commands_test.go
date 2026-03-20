@@ -13,13 +13,15 @@ func TestRootCommandHasAllResources(t *testing.T) {
 		"ais", "aisummaries", "available-numbers", "billing-accounts",
 		"billings", "calls", "campaigncalls", "campaigns", "chatmessages",
 		"chatroommessages", "chatrooms", "chats", "completion",
-		"conferencecalls", "conferences", "conversation-accounts",
-		"conversations", "customers", "emails", "extensions", "files",
-		"flows", "groupcalls", "login", "logout", "me", "messages",
-		"numbers", "outdials", "outplans", "providers", "queuecalls",
-		"queues", "recordings", "routes", "storage-accounts",
-		"storage-files", "tags", "transcribes", "transfers", "trunks",
-		"version",
+		"conferencecalls", "conferences", "contacts",
+		"conversation-accounts", "conversations", "customers",
+		"emails", "extensions", "files", "flows", "groupcalls",
+		"login", "logout", "me", "messages", "numbers", "outdials",
+		"outplans", "providers", "queuecalls", "queues", "rags",
+		"recordingfiles", "recordings", "routes", "speakings",
+		"storage-accounts", "storage-files", "tags", "teams",
+		"timelines", "transcribes", "transcripts", "transfers",
+		"trunks", "version",
 	}
 
 	registered := make(map[string]bool)
@@ -41,6 +43,7 @@ func TestResourceCommandsHaveSubcommands(t *testing.T) {
 		"calls", "messages", "emails", "conferences", "agents",
 		"campaigns", "flows", "queues", "numbers", "recordings",
 		"tags", "chats", "ais", "trunks", "providers",
+		"rags", "teams", "speakings", "contacts",
 	}
 
 	for _, name := range resources {

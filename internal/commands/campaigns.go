@@ -3,11 +3,12 @@ package commands
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	"github.com/voipbin/vn-cli/internal/auth"
 	"github.com/voipbin/vn-cli/internal/output"
-	"github.com/voipbin/voipbin-go/gens/voipbin_client"
 )
 
 func newCampaignsCmd() *cobra.Command {
@@ -60,7 +61,7 @@ func newCampaignsListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List campaigns",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -68,31 +69,24 @@ func newCampaignsListCmd() *cobra.Command {
 			pageToken, _ := cmd.Flags().GetString("page-token")
 			pageSize, _ := cmd.Flags().GetInt("page-size")
 
-			params := &voipbin_client.GetCampaignsParams{}
+			params := url.Values{}
 			if pageToken != "" {
-				params.PageToken = &pageToken
+				params.Set("page_token", pageToken)
 			}
 			if pageSize > 0 {
-				ps := pageSize
-				params.PageSize = &ps
+				params.Set("page_size", strconv.Itoa(pageSize))
 			}
 
-			resp, err := client.GetCampaignsWithResponse(context.Background(), params)
+			items, nextToken, err := c.List(context.Background(), "/campaigns", params)
 			if err != nil {
 				return fmt.Errorf("could not list campaigns: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil || resp.JSON200.Result == nil {
-				return fmt.Errorf("unexpected empty response")
+
+			if nextToken != "" {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", nextToken)
 			}
 
-			if resp.JSON200.NextPageToken != nil && *resp.JSON200.NextPageToken != "" {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", *resp.JSON200.NextPageToken)
-			}
-
-			return output.PrintList(cmd, *resp.JSON200.Result, campaignListColumns)
+			return output.PrintList(cmd, items, campaignListColumns)
 		},
 	}
 	cmd.Flags().String("page-token", "", "Pagination token")
@@ -106,23 +100,17 @@ func newCampaignsGetCmd() *cobra.Command {
 		Short: "Get a campaign by ID",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.GetCampaignsIdWithResponse(context.Background(), args[0])
+			result, err := c.Get(context.Background(), "/campaigns/"+args[0])
 			if err != nil {
 				return fmt.Errorf("could not get campaign: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, campaignDetailColumns)
+			return output.PrintItem(cmd, result, campaignDetailColumns)
 		},
 	}
 }
@@ -132,7 +120,7 @@ func newCampaignsCreateCmd() *cobra.Command {
 		Use:   "create",
 		Short: "Create a new campaign",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -147,31 +135,25 @@ func newCampaignsCreateCmd() *cobra.Command {
 			nextCampaignID, _ := cmd.Flags().GetString("next-campaign-id")
 			serviceLevel, _ := cmd.Flags().GetInt("service-level")
 
-			body := voipbin_client.PostCampaignsJSONRequestBody{
-				Name:           name,
-				Detail:         detail,
-				Type:           voipbin_client.CampaignManagerCampaignType(campType),
-				EndHandle:      voipbin_client.CampaignManagerCampaignEndHandle(endHandle),
-				OutplanId:      outplanID,
-				OutdialId:      outdialID,
-				QueueId:        queueID,
-				NextCampaignId: nextCampaignID,
-				ServiceLevel:   serviceLevel,
-				Actions:        []voipbin_client.FlowManagerAction{},
+			body := map[string]interface{}{
+				"name":             name,
+				"detail":           detail,
+				"type":             campType,
+				"end_handle":       endHandle,
+				"outplan_id":       outplanID,
+				"outdial_id":       outdialID,
+				"queue_id":         queueID,
+				"next_campaign_id": nextCampaignID,
+				"service_level":    serviceLevel,
+				"actions":          []interface{}{},
 			}
 
-			resp, err := client.PostCampaignsWithResponse(context.Background(), body)
+			result, err := c.Post(context.Background(), "/campaigns", body)
 			if err != nil {
 				return fmt.Errorf("could not create campaign: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, campaignDetailColumns)
+			return output.PrintItem(cmd, result, campaignDetailColumns)
 		},
 	}
 	cmd.Flags().String("name", "", "Campaign name")
@@ -194,7 +176,7 @@ func newCampaignsUpdateCmd() *cobra.Command {
 		Short: "Update a campaign",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -205,26 +187,20 @@ func newCampaignsUpdateCmd() *cobra.Command {
 			endHandle, _ := cmd.Flags().GetString("end-handle")
 			serviceLevel, _ := cmd.Flags().GetInt("service-level")
 
-			body := voipbin_client.PutCampaignsIdJSONRequestBody{
-				Name:         name,
-				Detail:       detail,
-				Type:         voipbin_client.CampaignManagerCampaignType(campType),
-				EndHandle:    voipbin_client.CampaignManagerCampaignEndHandle(endHandle),
-				ServiceLevel: serviceLevel,
+			body := map[string]interface{}{
+				"name":          name,
+				"detail":        detail,
+				"type":          campType,
+				"end_handle":    endHandle,
+				"service_level": serviceLevel,
 			}
 
-			resp, err := client.PutCampaignsIdWithResponse(context.Background(), args[0], body)
+			result, err := c.Put(context.Background(), "/campaigns/"+args[0], body)
 			if err != nil {
 				return fmt.Errorf("could not update campaign: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, campaignDetailColumns)
+			return output.PrintItem(cmd, result, campaignDetailColumns)
 		},
 	}
 	cmd.Flags().String("name", "", "Campaign name")
@@ -241,17 +217,14 @@ func newCampaignsDeleteCmd() *cobra.Command {
 		Short: "Delete a campaign",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.DeleteCampaignsIdWithResponse(context.Background(), args[0])
+			_, err = c.Delete(context.Background(), "/campaigns/"+args[0])
 			if err != nil {
 				return fmt.Errorf("could not delete campaign: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Campaign %s deleted.\n", args[0])
@@ -266,23 +239,20 @@ func newCampaignsSetStatusCmd() *cobra.Command {
 		Short: "Set campaign status",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
 			status, _ := cmd.Flags().GetString("status")
 
-			body := voipbin_client.PutCampaignsIdStatusJSONRequestBody{
-				Status: voipbin_client.CampaignManagerCampaignStatus(status),
+			body := map[string]interface{}{
+				"status": status,
 			}
 
-			resp, err := client.PutCampaignsIdStatusWithResponse(context.Background(), args[0], body)
+			_, err = c.Put(context.Background(), "/campaigns/"+args[0]+"/status", body)
 			if err != nil {
 				return fmt.Errorf("could not set campaign status: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Campaign %s status set to %s.\n", args[0], status)
@@ -300,23 +270,20 @@ func newCampaignsSetServiceLevelCmd() *cobra.Command {
 		Short: "Set campaign service level",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
 			serviceLevel, _ := cmd.Flags().GetInt("service-level")
 
-			body := voipbin_client.PutCampaignsIdServiceLevelJSONRequestBody{
-				ServiceLevel: serviceLevel,
+			body := map[string]interface{}{
+				"service_level": serviceLevel,
 			}
 
-			resp, err := client.PutCampaignsIdServiceLevelWithResponse(context.Background(), args[0], body)
+			_, err = c.Put(context.Background(), "/campaigns/"+args[0]+"/service_level", body)
 			if err != nil {
 				return fmt.Errorf("could not set service level: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Campaign %s service level updated.\n", args[0])
@@ -334,21 +301,18 @@ func newCampaignsSetActionsCmd() *cobra.Command {
 		Short: "Set campaign actions",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			body := voipbin_client.PutCampaignsIdActionsJSONRequestBody{
-				Actions: []voipbin_client.FlowManagerAction{},
+			body := map[string]interface{}{
+				"actions": []interface{}{},
 			}
 
-			resp, err := client.PutCampaignsIdActionsWithResponse(context.Background(), args[0], body)
+			_, err = c.Put(context.Background(), "/campaigns/"+args[0]+"/actions", body)
 			if err != nil {
 				return fmt.Errorf("could not set campaign actions: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Campaign %s actions updated.\n", args[0])
@@ -364,23 +328,20 @@ func newCampaignsSetNextCampaignCmd() *cobra.Command {
 		Short: "Set next campaign ID",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
 			nextCampaignID, _ := cmd.Flags().GetString("next-campaign-id")
 
-			body := voipbin_client.PutCampaignsIdNextCampaignIdJSONRequestBody{
-				NextCampaignId: nextCampaignID,
+			body := map[string]interface{}{
+				"next_campaign_id": nextCampaignID,
 			}
 
-			resp, err := client.PutCampaignsIdNextCampaignIdWithResponse(context.Background(), args[0], body)
+			_, err = c.Put(context.Background(), "/campaigns/"+args[0]+"/next_campaign_id", body)
 			if err != nil {
 				return fmt.Errorf("could not set next campaign: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Campaign %s next campaign set.\n", args[0])
@@ -398,7 +359,7 @@ func newCampaignsSetResourceInfoCmd() *cobra.Command {
 		Short: "Set campaign resource info",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -408,19 +369,16 @@ func newCampaignsSetResourceInfoCmd() *cobra.Command {
 			queueID, _ := cmd.Flags().GetString("queue-id")
 			nextCampaignID, _ := cmd.Flags().GetString("next-campaign-id")
 
-			body := voipbin_client.PutCampaignsIdResourceInfoJSONRequestBody{
-				OutplanId:      outplanID,
-				OutdialId:      outdialID,
-				QueueId:        queueID,
-				NextCampaignId: nextCampaignID,
+			body := map[string]interface{}{
+				"outplan_id":       outplanID,
+				"outdial_id":       outdialID,
+				"queue_id":         queueID,
+				"next_campaign_id": nextCampaignID,
 			}
 
-			resp, err := client.PutCampaignsIdResourceInfoWithResponse(context.Background(), args[0], body)
+			_, err = c.Put(context.Background(), "/campaigns/"+args[0]+"/resource_info", body)
 			if err != nil {
 				return fmt.Errorf("could not set resource info: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Campaign %s resource info updated.\n", args[0])

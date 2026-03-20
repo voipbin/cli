@@ -3,11 +3,12 @@ package commands
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	"github.com/voipbin/vn-cli/internal/auth"
 	"github.com/voipbin/vn-cli/internal/output"
-	"github.com/voipbin/voipbin-go/gens/voipbin_client"
 )
 
 func newActiveflowsCmd() *cobra.Command {
@@ -52,34 +53,27 @@ func newActiveflowsListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List activeflows",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 			pageToken, _ := cmd.Flags().GetString("page-token")
 			pageSize, _ := cmd.Flags().GetInt("page-size")
-			params := &voipbin_client.GetActiveflowsParams{}
+			params := url.Values{}
 			if pageToken != "" {
-				params.PageToken = &pageToken
+				params.Set("page_token", pageToken)
 			}
 			if pageSize > 0 {
-				ps := pageSize
-				params.PageSize = &ps
+				params.Set("page_size", strconv.Itoa(pageSize))
 			}
-			resp, err := client.GetActiveflowsWithResponse(context.Background(), params)
+			items, nextToken, err := c.List(context.Background(), "/activeflows", params)
 			if err != nil {
 				return fmt.Errorf("could not list activeflows: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
+			if nextToken != "" {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", nextToken)
 			}
-			if resp.JSON200 == nil || resp.JSON200.Result == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
-			if resp.JSON200.NextPageToken != nil && *resp.JSON200.NextPageToken != "" {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", *resp.JSON200.NextPageToken)
-			}
-			return output.PrintList(cmd, *resp.JSON200.Result, activeflowListColumns)
+			return output.PrintList(cmd, items, activeflowListColumns)
 		},
 	}
 	cmd.Flags().String("page-token", "", "Pagination token")
@@ -93,21 +87,15 @@ func newActiveflowsGetCmd() *cobra.Command {
 		Short: "Get an activeflow by ID",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetActiveflowsIdWithResponse(context.Background(), args[0])
+			item, err := c.Get(context.Background(), "/activeflows/"+args[0])
 			if err != nil {
 				return fmt.Errorf("could not get activeflow: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
-			return output.PrintItem(cmd, resp.JSON200, activeflowDetailColumns)
+			return output.PrintItem(cmd, item, activeflowDetailColumns)
 		},
 	}
 }
@@ -117,26 +105,20 @@ func newActiveflowsCreateCmd() *cobra.Command {
 		Use:   "create",
 		Short: "Create a new activeflow",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 			flowID, _ := cmd.Flags().GetString("flow-id")
-			body := voipbin_client.PostActiveflowsJSONRequestBody{}
+			body := map[string]interface{}{}
 			if flowID != "" {
-				body.FlowId = &flowID
+				body["flow_id"] = flowID
 			}
-			resp, err := client.PostActiveflowsWithResponse(context.Background(), body)
+			item, err := c.Post(context.Background(), "/activeflows", body)
 			if err != nil {
 				return fmt.Errorf("could not create activeflow: %w", err)
 			}
-			if resp.StatusCode() != 201 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON201 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
-			return output.PrintItem(cmd, resp.JSON201, activeflowDetailColumns)
+			return output.PrintItem(cmd, item, activeflowDetailColumns)
 		},
 	}
 	cmd.Flags().String("flow-id", "", "Flow ID to execute")
@@ -150,16 +132,12 @@ func newActiveflowsDeleteCmd() *cobra.Command {
 		Short: "Delete an activeflow",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
-			resp, err := client.DeleteActiveflowsIdWithResponse(context.Background(), args[0])
-			if err != nil {
+			if _, err := c.Delete(context.Background(), "/activeflows/"+args[0]); err != nil {
 				return fmt.Errorf("could not delete activeflow: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Activeflow %s deleted.\n", args[0])
 			return nil
@@ -173,16 +151,12 @@ func newActiveflowsStopCmd() *cobra.Command {
 		Short: "Stop an activeflow",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
-			resp, err := client.PostActiveflowsIdStopWithResponse(context.Background(), args[0])
-			if err != nil {
+			if _, err := c.Post(context.Background(), "/activeflows/"+args[0]+"/stop", nil); err != nil {
 				return fmt.Errorf("could not stop activeflow: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Activeflow %s stopped.\n", args[0])
 			return nil

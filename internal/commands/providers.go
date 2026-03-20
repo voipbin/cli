@@ -3,11 +3,12 @@ package commands
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	"github.com/voipbin/vn-cli/internal/auth"
 	"github.com/voipbin/vn-cli/internal/output"
-	"github.com/voipbin/voipbin-go/gens/voipbin_client"
 )
 
 func newProvidersCmd() *cobra.Command {
@@ -49,7 +50,7 @@ func newProvidersListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List providers",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -57,31 +58,24 @@ func newProvidersListCmd() *cobra.Command {
 			pageToken, _ := cmd.Flags().GetString("page-token")
 			pageSize, _ := cmd.Flags().GetInt("page-size")
 
-			params := &voipbin_client.GetProvidersParams{}
+			params := url.Values{}
 			if pageToken != "" {
-				params.PageToken = &pageToken
+				params.Set("page_token", pageToken)
 			}
 			if pageSize > 0 {
-				ps := pageSize
-				params.PageSize = &ps
+				params.Set("page_size", strconv.Itoa(pageSize))
 			}
 
-			resp, err := client.GetProvidersWithResponse(context.Background(), params)
+			items, nextToken, err := c.List(context.Background(), "/providers", params)
 			if err != nil {
 				return fmt.Errorf("could not list providers: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil || resp.JSON200.Result == nil {
-				return fmt.Errorf("unexpected empty response")
+
+			if nextToken != "" {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", nextToken)
 			}
 
-			if resp.JSON200.NextPageToken != nil && *resp.JSON200.NextPageToken != "" {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", *resp.JSON200.NextPageToken)
-			}
-
-			return output.PrintList(cmd, *resp.JSON200.Result, providerListColumns)
+			return output.PrintList(cmd, items, providerListColumns)
 		},
 	}
 	cmd.Flags().String("page-token", "", "Pagination token")
@@ -95,23 +89,17 @@ func newProvidersGetCmd() *cobra.Command {
 		Short: "Get a provider by ID",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.GetProvidersIdWithResponse(context.Background(), args[0])
+			result, err := c.Get(context.Background(), "/providers/"+args[0])
 			if err != nil {
 				return fmt.Errorf("could not get provider: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, providerDetailColumns)
+			return output.PrintItem(cmd, result, providerDetailColumns)
 		},
 	}
 }
@@ -121,7 +109,7 @@ func newProvidersCreateCmd() *cobra.Command {
 		Use:   "create",
 		Short: "Create a new provider",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -133,28 +121,22 @@ func newProvidersCreateCmd() *cobra.Command {
 			techPostfix, _ := cmd.Flags().GetString("tech-postfix")
 			provType, _ := cmd.Flags().GetString("type")
 
-			body := voipbin_client.PostProvidersJSONRequestBody{
-				Name:        name,
-				Hostname:    hostname,
-				Detail:      detail,
-				TechPrefix:  techPrefix,
-				TechPostfix: techPostfix,
-				Type:        voipbin_client.RouteManagerProviderType(provType),
-				TechHeaders: map[string]interface{}{},
+			body := map[string]interface{}{
+				"name":         name,
+				"hostname":     hostname,
+				"detail":       detail,
+				"tech_prefix":  techPrefix,
+				"tech_postfix": techPostfix,
+				"type":         provType,
+				"tech_headers": map[string]interface{}{},
 			}
 
-			resp, err := client.PostProvidersWithResponse(context.Background(), body)
+			result, err := c.Post(context.Background(), "/providers", body)
 			if err != nil {
 				return fmt.Errorf("could not create provider: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, providerDetailColumns)
+			return output.PrintItem(cmd, result, providerDetailColumns)
 		},
 	}
 	cmd.Flags().String("name", "", "Provider name")
@@ -174,7 +156,7 @@ func newProvidersUpdateCmd() *cobra.Command {
 		Short: "Update a provider",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -186,28 +168,22 @@ func newProvidersUpdateCmd() *cobra.Command {
 			techPostfix, _ := cmd.Flags().GetString("tech-postfix")
 			provType, _ := cmd.Flags().GetString("type")
 
-			body := voipbin_client.PutProvidersIdJSONRequestBody{
-				Name:        name,
-				Hostname:    hostname,
-				Detail:      detail,
-				TechPrefix:  techPrefix,
-				TechPostfix: techPostfix,
-				Type:        voipbin_client.RouteManagerProviderType(provType),
-				TechHeaders: map[string]interface{}{},
+			body := map[string]interface{}{
+				"name":         name,
+				"hostname":     hostname,
+				"detail":       detail,
+				"tech_prefix":  techPrefix,
+				"tech_postfix": techPostfix,
+				"type":         provType,
+				"tech_headers": map[string]interface{}{},
 			}
 
-			resp, err := client.PutProvidersIdWithResponse(context.Background(), args[0], body)
+			result, err := c.Put(context.Background(), "/providers/"+args[0], body)
 			if err != nil {
 				return fmt.Errorf("could not update provider: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
 
-			return output.PrintItem(cmd, resp.JSON200, providerDetailColumns)
+			return output.PrintItem(cmd, result, providerDetailColumns)
 		},
 	}
 	cmd.Flags().String("name", "", "Provider name")
@@ -225,17 +201,13 @@ func newProvidersDeleteCmd() *cobra.Command {
 		Short: "Delete a provider",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 
-			resp, err := client.DeleteProvidersIdWithResponse(context.Background(), args[0])
-			if err != nil {
+			if _, err := c.Delete(context.Background(), "/providers/"+args[0]); err != nil {
 				return fmt.Errorf("could not delete provider: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Provider %s deleted.\n", args[0])

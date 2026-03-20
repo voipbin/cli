@@ -3,11 +3,12 @@ package commands
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	"github.com/voipbin/vn-cli/internal/auth"
 	"github.com/voipbin/vn-cli/internal/output"
-	"github.com/voipbin/voipbin-go/gens/voipbin_client"
 )
 
 func newOutdialsCmd() *cobra.Command {
@@ -54,34 +55,27 @@ func newOutdialsListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List outdials",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 			pageToken, _ := cmd.Flags().GetString("page-token")
 			pageSize, _ := cmd.Flags().GetInt("page-size")
-			params := &voipbin_client.GetOutdialsParams{}
+			params := url.Values{}
 			if pageToken != "" {
-				params.PageToken = &pageToken
+				params.Set("page_token", pageToken)
 			}
 			if pageSize > 0 {
-				ps := pageSize
-				params.PageSize = &ps
+				params.Set("page_size", strconv.Itoa(pageSize))
 			}
-			resp, err := client.GetOutdialsWithResponse(context.Background(), params)
+			items, nextToken, err := c.List(context.Background(), "/outdials", params)
 			if err != nil {
 				return fmt.Errorf("could not list outdials: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
+			if nextToken != "" {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", nextToken)
 			}
-			if resp.JSON200 == nil || resp.JSON200.Result == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
-			if resp.JSON200.NextPageToken != nil && *resp.JSON200.NextPageToken != "" {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", *resp.JSON200.NextPageToken)
-			}
-			return output.PrintList(cmd, *resp.JSON200.Result, outdialListColumns)
+			return output.PrintList(cmd, items, outdialListColumns)
 		},
 	}
 	cmd.Flags().String("page-token", "", "Pagination token")
@@ -95,21 +89,15 @@ func newOutdialsGetCmd() *cobra.Command {
 		Short: "Get an outdial by ID",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
-			resp, err := client.GetOutdialsIdWithResponse(context.Background(), args[0])
+			result, err := c.Get(context.Background(), "/outdials/"+args[0])
 			if err != nil {
 				return fmt.Errorf("could not get outdial: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
-			return output.PrintItem(cmd, resp.JSON200, outdialDetailColumns)
+			return output.PrintItem(cmd, result, outdialDetailColumns)
 		},
 	}
 }
@@ -119,7 +107,7 @@ func newOutdialsCreateCmd() *cobra.Command {
 		Use:   "create",
 		Short: "Create a new outdial",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -127,23 +115,17 @@ func newOutdialsCreateCmd() *cobra.Command {
 			detail, _ := cmd.Flags().GetString("detail")
 			campaignID, _ := cmd.Flags().GetString("campaign-id")
 			data, _ := cmd.Flags().GetString("data")
-			body := voipbin_client.PostOutdialsJSONRequestBody{
-				Name:       name,
-				Detail:     detail,
-				CampaignId: campaignID,
-				Data:       data,
+			body := map[string]interface{}{
+				"name":        name,
+				"detail":      detail,
+				"campaign_id": campaignID,
+				"data":        data,
 			}
-			resp, err := client.PostOutdialsWithResponse(context.Background(), body)
+			result, err := c.Post(context.Background(), "/outdials", body)
 			if err != nil {
 				return fmt.Errorf("could not create outdial: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
-			return output.PrintItem(cmd, resp.JSON200, outdialDetailColumns)
+			return output.PrintItem(cmd, result, outdialDetailColumns)
 		},
 	}
 	cmd.Flags().String("name", "", "Outdial name")
@@ -161,27 +143,21 @@ func newOutdialsUpdateCmd() *cobra.Command {
 		Short: "Update an outdial",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 			name, _ := cmd.Flags().GetString("name")
 			detail, _ := cmd.Flags().GetString("detail")
-			body := voipbin_client.PutOutdialsIdJSONRequestBody{
-				Name:   name,
-				Detail: detail,
+			body := map[string]interface{}{
+				"name":   name,
+				"detail": detail,
 			}
-			resp, err := client.PutOutdialsIdWithResponse(context.Background(), args[0], body)
+			result, err := c.Put(context.Background(), "/outdials/"+args[0], body)
 			if err != nil {
 				return fmt.Errorf("could not update outdial: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
-			return output.PrintItem(cmd, resp.JSON200, outdialDetailColumns)
+			return output.PrintItem(cmd, result, outdialDetailColumns)
 		},
 	}
 	cmd.Flags().String("name", "", "New name")
@@ -195,16 +171,13 @@ func newOutdialsDeleteCmd() *cobra.Command {
 		Short: "Delete an outdial",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
-			resp, err := client.DeleteOutdialsIdWithResponse(context.Background(), args[0])
+			_, err = c.Delete(context.Background(), "/outdials/"+args[0])
 			if err != nil {
 				return fmt.Errorf("could not delete outdial: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Outdial %s deleted.\n", args[0])
 			return nil
@@ -218,18 +191,15 @@ func newOutdialsSetCampaignCmd() *cobra.Command {
 		Short: "Set campaign ID for an outdial",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 			campaignID, _ := cmd.Flags().GetString("campaign-id")
-			body := voipbin_client.PutOutdialsIdCampaignIdJSONRequestBody{CampaignId: campaignID}
-			resp, err := client.PutOutdialsIdCampaignIdWithResponse(context.Background(), args[0], body)
+			body := map[string]interface{}{"campaign_id": campaignID}
+			_, err = c.Put(context.Background(), "/outdials/"+args[0]+"/campaign_id", body)
 			if err != nil {
 				return fmt.Errorf("could not set campaign: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Outdial %s campaign set.\n", args[0])
 			return nil
@@ -246,18 +216,15 @@ func newOutdialsSetDataCmd() *cobra.Command {
 		Short: "Set data for an outdial",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 			data, _ := cmd.Flags().GetString("data")
-			body := voipbin_client.PutOutdialsIdDataJSONRequestBody{Data: data}
-			resp, err := client.PutOutdialsIdDataWithResponse(context.Background(), args[0], body)
+			body := map[string]interface{}{"data": data}
+			_, err = c.Put(context.Background(), "/outdials/"+args[0]+"/data", body)
 			if err != nil {
 				return fmt.Errorf("could not set data: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Outdial %s data set.\n", args[0])
 			return nil
@@ -274,32 +241,25 @@ func newOutdialsListTargetsCmd() *cobra.Command {
 		Short: "List targets for an outdial",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
 			pageToken, _ := cmd.Flags().GetString("page-token")
 			pageSize, _ := cmd.Flags().GetInt("page-size")
-			params := &voipbin_client.GetOutdialsIdTargetsParams{}
+			params := url.Values{}
 			if pageToken != "" {
-				params.PageToken = &pageToken
+				params.Set("page_token", pageToken)
 			}
 			if pageSize > 0 {
-				ps := pageSize
-				params.PageSize = &ps
+				params.Set("page_size", strconv.Itoa(pageSize))
 			}
-			resp, err := client.GetOutdialsIdTargetsWithResponse(context.Background(), args[0], params)
+			items, nextToken, err := c.List(context.Background(), "/outdials/"+args[0]+"/targets", params)
 			if err != nil {
 				return fmt.Errorf("could not list targets: %w", err)
 			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
-			}
-			if resp.JSON200 == nil || resp.JSON200.Result == nil {
-				return fmt.Errorf("unexpected empty response")
-			}
-			if resp.JSON200.NextPageToken != nil && *resp.JSON200.NextPageToken != "" {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", *resp.JSON200.NextPageToken)
+			if nextToken != "" {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Next page token: %s\n", nextToken)
 			}
 			cols := []output.Column{
 				{Name: "ID", Field: "id"},
@@ -307,7 +267,7 @@ func newOutdialsListTargetsCmd() *cobra.Command {
 				{Name: "DETAIL", Field: "detail"},
 				{Name: "DATA", Field: "data"},
 			}
-			return output.PrintList(cmd, *resp.JSON200.Result, cols)
+			return output.PrintList(cmd, items, cols)
 		},
 	}
 	cmd.Flags().String("page-token", "", "Pagination token")
@@ -321,7 +281,7 @@ func newOutdialsCreateTargetCmd() *cobra.Command {
 		Short: "Create a target for an outdial",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -329,18 +289,15 @@ func newOutdialsCreateTargetCmd() *cobra.Command {
 			detail, _ := cmd.Flags().GetString("detail")
 			data, _ := cmd.Flags().GetString("data")
 			dest0, _ := cmd.Flags().GetString("destination-0")
-			body := voipbin_client.PostOutdialsIdTargetsJSONRequestBody{
-				Name:         name,
-				Detail:       detail,
-				Data:         data,
-				Destination0: voipbin_client.CommonAddress{Target: &dest0},
+			body := map[string]interface{}{
+				"name":         name,
+				"detail":       detail,
+				"data":         data,
+				"destination0": map[string]interface{}{"target": dest0},
 			}
-			resp, err := client.PostOutdialsIdTargetsWithResponse(context.Background(), args[0], body)
+			_, err = c.Post(context.Background(), "/outdials/"+args[0]+"/targets", body)
 			if err != nil {
 				return fmt.Errorf("could not create target: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Target created for outdial %s.\n", args[0])
 			return nil
@@ -361,16 +318,13 @@ func newOutdialsDeleteTargetCmd() *cobra.Command {
 		Short: "Delete a target from an outdial",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := auth.NewClientFromContext(cmd)
+			c, err := auth.NewClientFromContext(cmd)
 			if err != nil {
 				return err
 			}
-			resp, err := client.DeleteOutdialsIdTargetsTargetIdWithResponse(context.Background(), args[0], args[1])
+			_, err = c.Delete(context.Background(), "/outdials/"+args[0]+"/targets/"+args[1])
 			if err != nil {
 				return fmt.Errorf("could not delete target: %w", err)
-			}
-			if resp.StatusCode() != 200 {
-				return fmt.Errorf("API error: %s", resp.Status())
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Target %s deleted from outdial %s.\n", args[1], args[0])
 			return nil
